@@ -37,7 +37,7 @@ keywords:            # leave empty for your own feeds
   - Roy Klooster     # your name/handles for feeds you don't own
 
 exclude_keywords:    # optional
-  - inforcer
+  - sponsored
 
 start_date: 2026-07-01   # optional: skip your back-catalogue
 
@@ -62,7 +62,7 @@ Optional. If the file has any content outside HTML comments, it's appended to th
 ```md
 - Prefer "Microsoft Entra ID" over "Azure AD".
 - My blog voice is direct - avoid "This blog post explores..." openings.
-- Don't mention Inforcer by name in Description or Private Description.
+- Don't mention my employer by name in Description or Private Description.
 ```
 
 **Bad uses** (fight the guardrails, produce broken output):
