@@ -196,17 +196,6 @@ The PR updates in place. Merge when it's ready.
 
 Once merged, copy each section of the file into the corresponding MVP portal form field and submit.
 
-## Adjusting the schedule
-
-Edit `.github/workflows/monitor.yml`:
-
-```yaml
-on:
-  schedule:
-    - cron: "0 3 * * *"   # 03:00 UTC nightly
-  workflow_dispatch:       # keep this for manual runs
-```
-
 ## Adding a non-blog activity
 
 The template defaults to `Blog`, but the model picks a different Activity Type when the source clearly matches one (a podcast RSS feed, a YouTube feed, an event page, an open-source repo). After the PR opens you can also edit the generated file and change `## Activity Type` yourself before merging.
@@ -218,39 +207,6 @@ Every Activity Type has slightly different follow-up fields. The template's **Ty
 
 Supported Activity Types (verbatim as they appear in the portal):
 `Blog`, `Podcast`, `Webinar/Online Training/Video/Livestream`, `Content Feedback and Editing`, `Online Support`, `Open Source/Project/Sample code/Tools`, `Product Feedback`, `Mentorship/Coaching`, `Speaker/Presenter at Microsoft Event`, `Speaker/Presenter at Third-party Event`, `User Group Owner`.
-
-## What's in the repo
-
-```
-.github/workflows/monitor.yml   # nightly workflow
-scripts/monitor.py              # single-file script
-templates/activity_template.md  # MVP portal field layout
-references/activity-types.md    # per-type field reference
-references/technology-areas.md  # full tech area enum
-config.yml                      # your sources, keywords, defaults
-activities/                     # generated MD files (your log)
-.state/seen.json                # dedup state, committed by the workflow
-```
-
-## Cost
-
-Zero, if your repo is public. GitHub Actions minutes on public repos are unlimited; GitHub Models inference is free within the per-day quota (plenty for one nightly run).
-
-Private repo? You get 2,000 free Actions minutes/month on the Free plan; a nightly run costs seconds.
-
-## FAQ
-
-**Do I need an OpenAI or Anthropic key?**
-No. GitHub Models exposes several models (including GPT-4o) for free from inside Actions. If you'd rather use your own key, edit `scripts/monitor.py` and swap the `call_github_models` function.
-
-**What if my blog doesn't have an RSS feed?**
-Add the plain URL. The script falls back to fetching the page and pulling the `<title>` + `<meta name="description">`. Less accurate than a feed, but works.
-
-**Can I run this outside of GitHub?**
-Yes — `python scripts/monitor.py` runs anywhere, provided you set `GITHUB_TOKEN` (or swap the LLM call for another provider). GitHub Actions is just the convenient cron host.
-
-**Will it re-add activities I already logged manually?**
-No. Anything whose URL appears in `.state/seen.json` is skipped. The state file is committed as part of each PR, so once you merge, that URL is off the list.
 
 ## License
 
