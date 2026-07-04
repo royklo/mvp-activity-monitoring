@@ -5,7 +5,9 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import date
+from itertools import chain
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,10 +20,13 @@ CONFIG_PATH = ROOT / "config.yml"
 STATE_PATH = ROOT / ".state" / "seen.json"
 ACTIVITIES = ROOT / "activities"
 TEMPLATE_PATH = ROOT / "templates" / "activity_template.md"
+TECH_AREAS_PATH = ROOT / "references" / "technology-areas.md"
+ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
+CUSTOM_INSTRUCTIONS_PATH = ROOT / "custom-instructions.md"
 
 MODELS_ENDPOINT = "https://models.github.ai/inference/chat/completions"
+MAX_BODY_CHARS = 6000  # cap so a huge post doesn't blow the prompt
 
-# Branch-name suffix per Activity Type.
 ACTIVITY_TYPE_SLUGS = {
     "Blog": "blog",
     "Podcast": "podcast",
@@ -37,6 +42,8 @@ ACTIVITY_TYPE_SLUGS = {
 }
 
 
+# --- config / state ---------------------------------------------------
+
 def load_config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text()) or {}
 
@@ -51,6 +58,17 @@ def save_state(seen: set[str]) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(sorted(seen), indent=2) + "\n")
 
+
+def load_custom_instructions() -> str:
+    # Return the raw file only when it holds content outside HTML comments.
+    if not CUSTOM_INSTRUCTIONS_PATH.exists():
+        return ""
+    raw = CUSTOM_INSTRUCTIONS_PATH.read_text()
+    stripped = re.sub(r"<!--.*?-->", "", raw, flags=re.S).strip()
+    return raw if stripped else ""
+
+
+# --- gather -----------------------------------------------------------
 
 def gather_items(sources: list[str]):
     for source in sources:
@@ -76,17 +94,6 @@ def gather_items(sources: list[str]):
             "tags": [],
             "published": "",
         }
-
-
-def _pick_body(entry) -> str:
-    # Prefer entry.content[0].value (full body) over entry.summary (excerpt).
-    content = entry.get("content") or []
-    if content and isinstance(content, list):
-        raw = content[0].get("value") if isinstance(content[0], dict) else ""
-    else:
-        raw = entry.get("summary", "")
-    stripped = _strip_html(raw)
-    return stripped[:6000]  # cap so a huge post doesn't blow the prompt
 
 
 def gather_wheremymvpsat(config: dict):
@@ -131,26 +138,26 @@ def gather_wheremymvpsat(config: dict):
         conf = conferences.get(row.get("conferenceId", ""), {})
         merged = {"speaker": row, "conference": conf}
         stable = conf.get("website") or f"wmma://conference/{row.get('conferenceId')}/user/{user_id}"
-        st = _parse_iso_struct(conf.get("startDate"))
         yield {
             "url": stable,
             "title": conf.get("name") or f"Conference {row.get('conferenceId', '?')}",
             "summary": json.dumps(merged, default=str, ensure_ascii=False)[:2000],
             "published": conf.get("startDate", ""),
-            "published_parsed": st,
+            "published_parsed": _parse_iso_struct(conf.get("startDate")),
             "source": "wheremymvpsat",
         }
 
 
-def _parse_iso_struct(iso_date: str | None):
-    if not iso_date:
-        return None
-    try:
-        d = date.fromisoformat(iso_date[:10])
-    except ValueError:
-        return None
-    import time as _time
-    return _time.struct_time((d.year, d.month, d.day, 0, 0, 0, 0, 0, 0))
+# --- content helpers --------------------------------------------------
+
+def _pick_body(entry) -> str:
+    # Prefer entry.content[0].value (full body) over entry.summary (excerpt).
+    content = entry.get("content") or []
+    if content and isinstance(content, list):
+        raw = content[0].get("value") if isinstance(content[0], dict) else ""
+    else:
+        raw = entry.get("summary", "")
+    return _strip_html(raw)[:MAX_BODY_CHARS]
 
 
 def _fetch_page(url: str) -> str | None:
@@ -183,7 +190,29 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text or "").strip()
 
 
-def parse_start_date(value) -> "date | None":
+def _parse_iso_struct(iso_date: str | None):
+    if not iso_date:
+        return None
+    try:
+        d = date.fromisoformat(iso_date[:10])
+    except ValueError:
+        return None
+    return time.struct_time((d.year, d.month, d.day, 0, 0, 0, 0, 0, 0))
+
+
+def _struct_time_to_date(st) -> date | None:
+    if st is None:
+        return None
+    return date(st.tm_year, st.tm_mon, st.tm_mday)
+
+
+def _haystack(item: dict) -> str:
+    return f"{item['title']} {item['summary']} {item['url']}".lower()
+
+
+# --- filters ----------------------------------------------------------
+
+def parse_start_date(value) -> date | None:
     if not value:
         return None
     if isinstance(value, date):
@@ -195,35 +224,30 @@ def parse_start_date(value) -> "date | None":
         return None
 
 
-def item_date_iso(item: dict) -> str:
-    st = item.get("published_parsed")
-    if st:
-        return date(st.tm_year, st.tm_mon, st.tm_mday).isoformat()
-    return date.today().isoformat()
-
-
-def is_after_start_date(item: dict, start_date: "date | None") -> bool:
-    # No cutoff or no parseable date -> pass through.
+def is_after_start_date(item: dict, start_date: date | None) -> bool:
     if start_date is None:
         return True
-    st = item.get("published_parsed")
-    if st is None:
-        return True
-    return date(st.tm_year, st.tm_mon, st.tm_mday) >= start_date
+    d = _struct_time_to_date(item.get("published_parsed"))
+    return True if d is None else d >= start_date
 
 
 def matches_keywords(item: dict, keywords: list[str]) -> bool:
     if not keywords:
         return True
-    hay = f"{item['title']} {item['summary']} {item['url']}".lower()
+    hay = _haystack(item)
     return any(k.lower() in hay for k in keywords)
 
 
 def matches_exclude(item: dict, exclude_keywords: list[str]) -> bool:
     if not exclude_keywords:
         return False
-    hay = f"{item['title']} {item['summary']} {item['url']}".lower()
+    hay = _haystack(item)
     return any(k.lower() in hay for k in exclude_keywords)
+
+
+def item_date_iso(item: dict) -> str:
+    d = _struct_time_to_date(item.get("published_parsed"))
+    return (d or date.today()).isoformat()
 
 
 def slug_from_url(url: str) -> str:
@@ -232,6 +256,8 @@ def slug_from_url(url: str) -> str:
     slug = re.sub(r"[^a-z0-9-]+", "-", path.lower()).strip("-")
     return slug[:80] or "activity"
 
+
+# --- model + prompt ---------------------------------------------------
 
 def call_github_models(prompt: str, token: str, model: str) -> str:
     r = httpx.post(
@@ -250,23 +276,6 @@ def call_github_models(prompt: str, token: str, model: str) -> str:
     )
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
-
-
-TECH_AREAS_PATH = ROOT / "references" / "technology-areas.md"
-ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
-CUSTOM_INSTRUCTIONS_PATH = ROOT / "custom-instructions.md"
-
-
-def load_custom_instructions() -> str:
-    if not CUSTOM_INSTRUCTIONS_PATH.exists():
-        return ""
-    raw = CUSTOM_INSTRUCTIONS_PATH.read_text()
-    # Strip HTML comments for the "is there anything to inject?" check
-    # but pass the raw file (comments and all) to the model - the model
-    # ignores comments happily and this keeps the injected text 1:1 with
-    # what the user sees in their editor.
-    stripped = re.sub(r"<!--.*?-->", "", raw, flags=re.S).strip()
-    return raw if stripped else ""
 
 
 def build_prompt(item: dict, template: str) -> str:
@@ -393,6 +402,26 @@ Emit ONLY the sub-fields for the Activity Type you picked. Omit the entire secti
 """
 
 
+# --- workflow outputs -------------------------------------------------
+
+def _extract_activity_type(md: str) -> str | None:
+    m = re.search(r"^##\s+Activity Type\s*\n+([^\n]+)", md, re.M)
+    return m.group(1).strip() if m else None
+
+
+def _emit_workflow_outputs(types_found: set[str], auto_merge: bool) -> None:
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if not output_path:
+        return
+    slugs = sorted({ACTIVITY_TYPE_SLUGS.get(t, "other") for t in types_found}) or ["empty"]
+    with open(output_path, "a") as f:
+        f.write(f"has_new={'true' if types_found else 'false'}\n")
+        f.write(f"types={'-'.join(slugs)}\n")
+        f.write(f"auto_merge={'true' if auto_merge else 'false'}\n")
+
+
+# --- main -------------------------------------------------------------
+
 def main() -> int:
     config = load_config()
     sources = config.get("sources") or []
@@ -400,10 +429,12 @@ def main() -> int:
     exclude_keywords = config.get("exclude_keywords") or []
     start_date = parse_start_date(config.get("start_date"))
     model = config.get("model") or "openai/gpt-4.1"
+    auto_merge = bool(config.get("auto_merge"))
 
     wmma_enabled = bool((config.get("wheremymvpsat") or {}).get("enabled"))
     if not sources and not wmma_enabled:
         print("config.yml has no sources and wheremymvpsat is disabled - nothing to do")
+        _emit_workflow_outputs(set(), auto_merge)
         return 0
 
     token = os.environ.get("GITHUB_TOKEN")
@@ -414,14 +445,10 @@ def main() -> int:
     template = TEMPLATE_PATH.read_text()
     seen = load_state()
 
-    def iter_all():
-        yield from gather_items(sources)
-        yield from gather_wheremymvpsat(config)
-
     new_items = []
     # start_date and exclude misses don't get marked seen, so loosening
     # either config value later resurfaces the items on the next run.
-    for item in iter_all():
+    for item in chain(gather_items(sources), gather_wheremymvpsat(config)):
         if not item["url"] or item["url"] in seen:
             continue
         if not is_after_start_date(item, start_date):
@@ -438,6 +465,7 @@ def main() -> int:
     if not new_items:
         print("no new items")
         save_state(seen)
+        _emit_workflow_outputs(set(), auto_merge)
         return 0
 
     ACTIVITIES.mkdir(exist_ok=True)
@@ -457,24 +485,11 @@ def main() -> int:
         print(f"wrote {path.relative_to(ROOT)}")
 
     save_state(seen)
-    _emit_workflow_outputs(types_found)
+    _emit_workflow_outputs(types_found, auto_merge)
     return 0
 
 
-def _extract_activity_type(md: str) -> str | None:
-    m = re.search(r"^##\s+Activity Type\s*\n+([^\n]+)", md, re.M)
-    return m.group(1).strip() if m else None
-
-
-def _emit_workflow_outputs(types_found: set[str]) -> None:
-    output_path = os.environ.get("GITHUB_OUTPUT")
-    if not output_path:
-        return
-    slugs = sorted({ACTIVITY_TYPE_SLUGS.get(t, "other") for t in types_found}) or ["empty"]
-    with open(output_path, "a") as f:
-        f.write(f"has_new={'true' if types_found else 'false'}\n")
-        f.write(f"types={'-'.join(slugs)}\n")
-
+# --- self-check -------------------------------------------------------
 
 def _self_check() -> None:
     assert slug_from_url("https://rksolutions.nl/posts/macos-laps/") == "posts-macos-laps"
@@ -497,18 +512,26 @@ def _self_check() -> None:
     assert parse_start_date("") is None
     assert parse_start_date("not-a-date") is None
     assert parse_start_date("2026-07-04") == date(2026, 7, 4)
-    import time as _time
-    _st = _time.struct_time((2026, 7, 4, 12, 0, 0, 0, 0, 0))
-    _st_old = _time.struct_time((2025, 1, 1, 12, 0, 0, 0, 0, 0))
+    _st = time.struct_time((2026, 7, 4, 12, 0, 0, 0, 0, 0))
+    _st_old = time.struct_time((2025, 1, 1, 12, 0, 0, 0, 0, 0))
     assert is_after_start_date({"published_parsed": _st}, date(2026, 1, 1)) is True
     assert is_after_start_date({"published_parsed": _st_old}, date(2026, 1, 1)) is False
     assert is_after_start_date({"published_parsed": None}, date(2026, 1, 1)) is True
     assert is_after_start_date({"published_parsed": _st_old}, None) is True
-    assert matches_exclude({"title": "About Inforcer", "summary": "", "url": ""}, ["inforcer"]) is True
-    assert matches_exclude({"title": "Something else", "summary": "", "url": ""}, ["inforcer"]) is False
+    assert matches_exclude({"title": "About Sponsored", "summary": "", "url": ""}, ["sponsored"]) is True
+    assert matches_exclude({"title": "Something else", "summary": "", "url": ""}, ["sponsored"]) is False
     assert matches_exclude({"title": "x", "summary": "", "url": ""}, []) is False
     assert item_date_iso({"published_parsed": _st}) == "2026-07-04"
     assert item_date_iso({"published_parsed": None}) == date.today().isoformat()
+    assert _pick_body({"content": [{"value": "<p>hi</p>"}]}) == "hi"
+    assert _pick_body({"summary": "<b>fallback</b>"}) == "fallback"
+    assert _pick_body({"content": [{"value": "x" * 10000}]}) == "x" * MAX_BODY_CHARS
+    assert _parse_iso_struct(None) is None
+    assert _parse_iso_struct("") is None
+    assert _parse_iso_struct("not-a-date") is None
+    _pi = _parse_iso_struct("2026-07-04")
+    assert _pi is not None and _pi.tm_year == 2026 and _pi.tm_mon == 7 and _pi.tm_mday == 4
+    assert _haystack({"title": "Ab", "summary": "Cd", "url": "Ef"}) == "ab cd ef"
     _real = CUSTOM_INSTRUCTIONS_PATH.read_text() if CUSTOM_INSTRUCTIONS_PATH.exists() else ""
     try:
         CUSTOM_INSTRUCTIONS_PATH.write_text("<!-- only a comment -->\n\n")
@@ -517,6 +540,23 @@ def _self_check() -> None:
         assert "real note here" in load_custom_instructions()
     finally:
         CUSTOM_INSTRUCTIONS_PATH.write_text(_real)
+    import tempfile
+    with tempfile.NamedTemporaryFile("w+", delete=False) as f:
+        tmp = f.name
+    try:
+        os.environ["GITHUB_OUTPUT"] = tmp
+        _emit_workflow_outputs(set(), False)
+        assert "has_new=false" in Path(tmp).read_text()
+        assert "auto_merge=false" in Path(tmp).read_text()
+        Path(tmp).write_text("")
+        _emit_workflow_outputs({"Blog", "Podcast"}, True)
+        out = Path(tmp).read_text()
+        assert "has_new=true" in out
+        assert "types=blog-podcast" in out
+        assert "auto_merge=true" in out
+    finally:
+        os.environ.pop("GITHUB_OUTPUT", None)
+        os.unlink(tmp)
     print("self-check ok")
 
 

@@ -26,4 +26,4 @@ model: openai/gpt-4.1
 # secret WHEREMYMVPSAT_PAT. Set user_id to your own wheremymvps.at handle.
 wheremymvpsat:
   enabled: false
-  # user_id: royklo
+  user_id: royklo
