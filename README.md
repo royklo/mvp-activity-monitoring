@@ -17,6 +17,8 @@ Fork it, point it at your content, stop retyping portal fields.
 
 The generated markdown mirrors the MVP portal form 1:1: Activity Type, Primary/Additional Technology Area, Title, Description, Private Description, Target Audience, Published Date, Role, Number of Views, Quantity, Activity URL.
 
+> **Auto-upload (roadmap):** Microsoft has not yet released a public API for the MVP contribution portal, so activities still have to be pasted in by hand — this tool drafts the fields for you. **When Microsoft ships that API, this workflow will be updated to submit merged activities directly to the portal**, and the "copy-paste each field" step goes away. Until then, the merged markdown files in `activities/` are your handoff artefact.
+
 ---
 
 ## Setup
