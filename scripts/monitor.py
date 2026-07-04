@@ -62,7 +62,7 @@ def save_state(seen: set[str]) -> None:
 
 
 def gather_items(sources: list[str]):
-    """Yield {url, title, summary, published} for every entry across all sources."""
+    """Yield {url, title, summary, published, published_parsed} for every entry."""
     for source in sources:
         parsed = feedparser.parse(source)
         if parsed.entries:
@@ -72,6 +72,7 @@ def gather_items(sources: list[str]):
                     "title": (entry.get("title") or "").strip(),
                     "summary": _strip_html(entry.get("summary", "")),
                     "published": entry.get("published", ""),
+                    "published_parsed": entry.get("published_parsed"),
                 }
             continue
         # Not a feed - treat as a single page.
@@ -116,11 +117,43 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text or "").strip()
 
 
+def parse_start_date(value) -> "date | None":
+    if not value:
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        print(f"! invalid start_date '{value}' - expected YYYY-MM-DD; ignoring", file=sys.stderr)
+        return None
+
+
+def is_after_start_date(item: dict, start_date: "date | None") -> bool:
+    """True if the item was published on/after start_date. Items with no
+    parseable date pass through so RSS feeds with weird metadata don't
+    silently drop everything."""
+    if start_date is None:
+        return True
+    st = item.get("published_parsed")
+    if st is None:
+        return True
+    return date(st.tm_year, st.tm_mon, st.tm_mday) >= start_date
+
+
 def matches_keywords(item: dict, keywords: list[str]) -> bool:
     if not keywords:
         return True
     hay = f"{item['title']} {item['summary']} {item['url']}".lower()
     return any(k.lower() in hay for k in keywords)
+
+
+def matches_exclude(item: dict, exclude_keywords: list[str]) -> bool:
+    """True if any exclude keyword is present. Case-insensitive substring."""
+    if not exclude_keywords:
+        return False
+    hay = f"{item['title']} {item['summary']} {item['url']}".lower()
+    return any(k.lower() in hay for k in exclude_keywords)
 
 
 def slug_from_url(url: str) -> str:
@@ -196,6 +229,8 @@ def main() -> int:
     config = load_config()
     sources = config.get("sources") or []
     keywords = config.get("keywords") or []
+    exclude_keywords = config.get("exclude_keywords") or []
+    start_date = parse_start_date(config.get("start_date"))
     model = config.get("model") or "openai/gpt-4o"
 
     if not sources:
@@ -213,6 +248,14 @@ def main() -> int:
     new_items = []
     for item in gather_items(sources):
         if not item["url"] or item["url"] in seen:
+            continue
+        if not is_after_start_date(item, start_date):
+            # Don't record in seen - if start_date is later moved earlier,
+            # older items should become visible again.
+            continue
+        if matches_exclude(item, exclude_keywords):
+            # Don't record in seen - if an exclude term is later removed,
+            # previously-excluded items should come back through.
             continue
         if not matches_keywords(item, keywords):
             seen.add(item["url"])
@@ -280,6 +323,20 @@ def _self_check() -> None:
     assert _extract_activity_type("## Title\nNo activity type here") is None
     assert ACTIVITY_TYPE_SLUGS["Speaker/Presenter at Microsoft Event"] == "event"
     assert ACTIVITY_TYPE_SLUGS["Speaker/Presenter at Third-party Event"] == "event"
+    assert parse_start_date(None) is None
+    assert parse_start_date("") is None
+    assert parse_start_date("not-a-date") is None
+    assert parse_start_date("2026-07-04") == date(2026, 7, 4)
+    import time as _time
+    _st = _time.struct_time((2026, 7, 4, 12, 0, 0, 0, 0, 0))
+    _st_old = _time.struct_time((2025, 1, 1, 12, 0, 0, 0, 0, 0))
+    assert is_after_start_date({"published_parsed": _st}, date(2026, 1, 1)) is True
+    assert is_after_start_date({"published_parsed": _st_old}, date(2026, 1, 1)) is False
+    assert is_after_start_date({"published_parsed": None}, date(2026, 1, 1)) is True  # no date -> pass
+    assert is_after_start_date({"published_parsed": _st_old}, None) is True  # no cutoff -> pass
+    assert matches_exclude({"title": "About Inforcer", "summary": "", "url": ""}, ["inforcer"]) is True
+    assert matches_exclude({"title": "Something else", "summary": "", "url": ""}, ["inforcer"]) is False
+    assert matches_exclude({"title": "x", "summary": "", "url": ""}, []) is False
     print("self-check ok")
 
 

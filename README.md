@@ -55,6 +55,21 @@ auto_merge: false
 
 The workflow does **not** apply default technology areas or a default target audience. The model picks Primary/Additional Technology Area and Target Audience from what each individual piece of content is actually about, using the full portal enum in `references/technology-areas.md`. If a source doesn't clearly map to one area, the field is written as `(uncertain - please review)` in the PR — you fill it in during review.
 
+### Optional filters
+
+Two more knobs in `config.yml`, both off by default:
+
+```yaml
+exclude_keywords:
+  - inforcer          # posts that mention your day-job employer
+  - sponsored         # sponsored content that doesn't count as MVP activity
+
+start_date: 2026-07-01  # only consider items published on/after this date
+```
+
+- **`exclude_keywords`** — case-insensitive substring match against title, summary, and URL. Any hit drops the item BEFORE the include-keyword check. Excluded items are not written to `seen.json`, so if you remove an exclude term later the old posts flow through again.
+- **`start_date`** — YYYY-MM-DD lower bound on published date. Useful when you first enable the workflow and don't want your entire back-catalogue to open as one huge PR. Items with no parseable date pass through (fail-open). Also not written to `seen.json`, so moving the date earlier later resurfaces older posts.
+
 ### 3. Enable the two GitHub features the workflow needs
 
 Both are free.
