@@ -106,6 +106,32 @@ Merged files stay in `activities/` as your permanent log. `.state/seen.json` get
 
 ---
 
+## Getting updates from the template
+
+"Use this template" creates an independent copy — updates to the template repo don't auto-flow into your instance. To pull the latest fixes and features:
+
+**One-time:** wire the template as a second git remote in your local clone.
+
+```bash
+git remote add template git@github.com:royklo/mvp-activity-monitoring.git
+git fetch template
+```
+
+**When you want to update:**
+
+```bash
+git fetch template
+git merge template/main
+# resolve conflicts — for config.yml and custom-instructions.md, keep YOUR version
+git push
+```
+
+Your config, secrets, and merged activities are safe. The template only ever changes the script, workflow, templates, and references.
+
+> **Tip:** click **Watch → Custom → Releases** on <https://github.com/royklo/mvp-activity-monitoring> to get an email when a new version is tagged.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |
