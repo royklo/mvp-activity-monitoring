@@ -118,6 +118,13 @@ def parse_start_date(value) -> "date | None":
         return None
 
 
+def item_date_iso(item: dict) -> str:
+    st = item.get("published_parsed")
+    if st:
+        return date(st.tm_year, st.tm_mon, st.tm_mday).isoformat()
+    return date.today().isoformat()
+
+
 def is_after_start_date(item: dict, start_date: "date | None") -> bool:
     # No cutoff or no parseable date -> pass through.
     if start_date is None:
@@ -199,6 +206,8 @@ Rules:
 - For any numeric field you cannot derive from the source (views, sessions, attendees), leave the literal placeholder "(fill from analytics before submitting)".
 - Use regular hyphens, never em-dashes.
 - Do not fabricate metrics, dates, or facts not present in the source item.
+- Do NOT add a YAML frontmatter block (no leading `---`). Start with the `# MVP Activity: ...` heading.
+- Published Date: use the source's published date verbatim. If the source has no date, write "(unknown)".
 
 ===== Activity Types reference =====
 {activity_types}
@@ -252,7 +261,6 @@ def main() -> int:
         return 0
 
     ACTIVITIES.mkdir(exist_ok=True)
-    today = date.today().isoformat()
     types_found: set[str] = set()
     for item in new_items:
         try:
@@ -260,7 +268,7 @@ def main() -> int:
         except httpx.HTTPError as exc:
             print(f"! model call failed for {item['url']}: {exc}", file=sys.stderr)
             continue
-        path = ACTIVITIES / f"{today}-{slug_from_url(item['url'])}.md"
+        path = ACTIVITIES / f"{item_date_iso(item)}-{slug_from_url(item['url'])}.md"
         path.write_text(md.rstrip() + "\n")
         seen.add(item["url"])
         activity_type = _extract_activity_type(md)
@@ -319,6 +327,8 @@ def _self_check() -> None:
     assert matches_exclude({"title": "About Inforcer", "summary": "", "url": ""}, ["inforcer"]) is True
     assert matches_exclude({"title": "Something else", "summary": "", "url": ""}, ["inforcer"]) is False
     assert matches_exclude({"title": "x", "summary": "", "url": ""}, []) is False
+    assert item_date_iso({"published_parsed": _st}) == "2026-07-04"
+    assert item_date_iso({"published_parsed": None}) == date.today().isoformat()
     print("self-check ok")
 
 

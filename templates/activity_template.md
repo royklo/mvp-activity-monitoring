@@ -1,9 +1,3 @@
----
-source_url: <SOURCE_URL>
-activity_type: <ACTIVITY_TYPE>
-detected_on: <YYYY-MM-DD>
----
-
 # MVP Activity: <TITLE>
 
 ## Activity Type
