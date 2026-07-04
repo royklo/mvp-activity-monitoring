@@ -271,34 +271,94 @@ def build_prompt(item: dict, template: str) -> str:
             "'Speaker/Presenter at Third-party Event'. Use conference.startDate for "
             "Published Date. Use conference.website for Activity URL if present."
         )
-    return f"""You are drafting a Microsoft MVP activity tracking entry from a piece of online content.
+    return f"""# Role
+You are drafting a single Microsoft MVP program activity entry from one piece of online content the MVP created or participated in. A Microsoft program reviewer will read the output straight from your response. Write for that reviewer, not for the MVP or a peer engineer.
+
+# Non-negotiables
+1. Return ONLY the filled-in markdown from the template. No preamble, no code fence, no YAML frontmatter (`---`). Start with `# MVP Activity: ...`.
+2. Preserve every heading in the template exactly. Never rename, drop, or reorder them.
+3. Never invent facts. Every date, number, statistic, quote, product name, or claim must come from the Source item below. If a required field cannot be derived, write the exact placeholder given for that field - not a guess.
+4. Use plain hyphens (`-`), never em-dashes (`—`).
+5. Enum fields (Activity Type, Technology Area, Target Audience, Role, Microsoft Event, etc.) must be copied verbatim from the reference blocks at the bottom of this prompt. Case, punctuation, and slashes must match exactly.
+
+# How to work through this
+Follow these steps in order. Do not skip.
+
+Step 1. Read Title, Tags, Body, and Published from the Source item.
+Step 2. Decide Activity Type (see rules below). Note the type-specific fields it requires.
+Step 3. Anchor on the Tags line - it is the AUTHOR'S OWN CLASSIFICATION of the content. Use it as the primary signal for Technology Area choices. The body is context; the tags are ground truth for what the content is about.
+Step 4. Pick Primary Technology Area, then decide whether an Additional Technology Area is warranted (see the strict rule below).
+Report each Technology Area verbatim from the Technology Areas reference. The reference is grouped for browsing; only the leaf values are legal outputs.
+Step 5. Fill in the descriptive fields (Title, Description, Private Description) using only material from the Source item.
+Step 6. List every Target Audience the content serves.
+Step 7. Fill Published Date, Role, Quantity, Activity URL, and the Type-specific fields block for the chosen Activity Type.
+
+# Per-field rules
+
+## Activity Type
+Default `Blog`. Choose a different value ONLY when the source clearly matches one:
+- Podcast RSS or audio feed -> `Podcast`
+- YouTube/Vimeo/livestream feed -> `Webinar/Online Training/Video/Livestream`
+- Conference session page, event listing, meetup -> `Speaker/Presenter at Microsoft Event` if the conference is a known Microsoft event (Build, Ignite, Inspire, MVP Summit, RD Summit, MLSA Summit); otherwise `Speaker/Presenter at Third-party Event`
+- Public repo or code sample project -> `Open Source/Project/Sample code/Tools`
+- Community forum post, StackOverflow answer, Discord/Slack support thread -> `Online Support`
+- 1-on-1 or small-group teaching/coaching -> `Mentorship/Coaching`
+- Running or leading a user group -> `User Group Owner`
+- Editing/reviewing content -> `Content Feedback and Editing`
+- Product feedback to Microsoft -> `Product Feedback`
+
+## Primary Technology Area
+Pick exactly one value verbatim from the Technology Areas reference. Choose the SINGLE product the content is most centrally about. If nothing in the reference plausibly fits, write literally `(uncertain - please review)` - do not force a value.
+
+## Additional Technology Areas
+Only fill this when the content SUBSTANTIVELY covers a second Microsoft product. Substantive means multiple paragraphs, code samples, or configuration examples explicitly about that product. All three of the following DO NOT COUNT:
+- A single passing mention in an intro or scenario ("A user opens Teams and...", "you might also use SharePoint...").
+- A product name in an analogy or comparison ("similar to Outlook rules").
+- A product name that only appears in a stack trace, screenshot title, or file path.
+
+If the Tags line does not include the product AND the body does not substantively cover it, write literally `(no second area detected - please review)`. Do not force a value. The reviewer will decide whether to add one manually.
+
+## Title
+Max 100 characters. Prefer the source's own title; shorten only if it exceeds the limit.
+
+## Description
+Two short paragraphs, 1000 characters combined maximum, in program-reviewer voice (third person, no "you"). Paragraph 1: what the content covers - the concrete subject, key steps, tools, commands, or conclusions. Paragraph 2: impact - who it helps and what problem it saves them. No filler adjectives ("comprehensive", "in-depth", "cutting-edge"). No promotional language.
+
+## Private Description
+Max 1000 characters, MVP-only context: the trigger for creating the content, the documentation gap it fills, a customer/community pattern it addresses. Never include confidential customer names. If nothing meaningful to add beyond the public description, write one honest sentence to that effect.
+
+## Target Audience
+List EVERY audience the content genuinely serves, one per line as `- <value>`. Do not stop at one. Selection rules:
+- `IT Pro`: hands-on ops/admin walkthrough, troubleshooting, configuration
+- `Developer`: contains code, API/SDK usage, scripting, automation targeted at builders
+- `Technical Decision Maker`: covers governance, compliance, architecture patterns, security posture, policy trade-offs
+- `Business Decision Maker`: covers strategy, ROI, licensing, org-level decisions
+- `Student`: beginner tutorial or foundational explainer
+- `Other`: none of the above fit
+Most technical MVP-blog posts serve at least two of these. A post that walks an admin through fixing a compliance issue and explains the underlying policy design serves `IT Pro` AND `Technical Decision Maker`.
+
+## Published Date
+Copy the source's published date verbatim. If the source has no parseable date, write `(unknown)`.
+
+## Role
+Default `Author`. Use `Contributor` only if the MVP was not the primary creator. For Mentorship/Coaching pick from `Organizer | Mentor | Other`. For User Group Owner pick from `Organizer | Other`.
+
+## Quantity
+Always `1`.
+
+## Activity URL
+Use the URL from the Source item verbatim.
+
+## Type-specific fields
+Emit ONLY the sub-fields for the Activity Type you picked. Omit the entire section if the type has no extras. Numeric fields you cannot derive from the source get the literal placeholder `(fill from analytics before submitting)`.
+
+# Source item
 {source_note}
-Source item:
 - URL: {item['url']}
 - Title: {item['title']}
-- Tags (from the feed): {', '.join(item.get('tags') or []) or '(none)'}
+- Tags (from the feed, AUTHORITATIVE for topic classification): {', '.join(item.get('tags') or []) or '(none)'}
 - Body: {item['summary']}
 - Published (raw): {item['published']}
-
-Return ONLY the filled-in markdown from the template below. Preserve the exact structure and headings.
-
-Rules:
-- Activity Type: default "Blog". Only choose another value if the source clearly matches it (e.g. a podcast RSS -> "Podcast"; a YouTube/Vimeo feed -> "Webinar/Online Training/Video/Livestream"; an event or session page -> "Speaker/Presenter at Microsoft Event" or "Speaker/Presenter at Third-party Event"; an open-source repo -> "Open Source/Project/Sample code/Tools"). Pick verbatim from the Activity Types reference below.
-- Primary Technology Area: pick exactly ONE value verbatim from the Technology Areas reference, the single product the content is most centrally about. If nothing fits, write "(uncertain - please review)".
-- Additional Technology Areas: only fill this when the content SUBSTANTIVELY covers a second Microsoft product - meaning multiple sections, code samples, configuration examples, or discussion of that product. A single passing mention in an intro/scenario ("A user opens Teams and...", "similar to Outlook", "like SharePoint") DOES NOT count and MUST be ignored. The tags line above is authoritative signal: prefer picking a product that appears in the tags. If the tags don't include a plausible second product and the body doesn't substantively cover one, write "(no second area detected - please review)" - do not force a value just to fill the field.
-- Target Audience: list EVERY audience the content serves, one per line as `- <value>`. Do not stop at one. Rule of thumb: hands-on ops/admin walkthrough = "IT Pro"; add "Developer" when there is code, API, or SDK usage; add "Technical Decision Maker" when the content covers governance, compliance, architecture, or policy choices; add "Business Decision Maker" for strategy/ROI content; add "Student" for beginner tutorials. Most technical posts on a MVP blog serve at least two audiences.
-- Title: max 100 characters.
-- Description: 2 short paragraphs, max 1000 characters total. Paragraph 1 = what the content covers; paragraph 2 = impact. Program-reviewer voice, not peer-to-peer.
-- Private Description: MVP-only context, max 1000 characters. One honest sentence is fine if nothing extra to add.
-- Role: default "Author" (use "Contributor" only if the MVP was not the primary creator). Special enums per type: Mentorship/Coaching = Organizer | Mentor | Other; User Group Owner = Organizer | Other.
-- Quantity: always 1.
-- Activity URL: use the Source URL verbatim.
-- Type-specific fields section: emit ONLY the sub-fields that match the chosen Activity Type. Omit the whole section if the type has no extras (see the template).
-- For any numeric field you cannot derive from the source (views, sessions, attendees), leave the literal placeholder "(fill from analytics before submitting)".
-- Use regular hyphens, never em-dashes.
-- Do not fabricate metrics, dates, or facts not present in the source item.
-- Do NOT add a YAML frontmatter block (no leading `---`). Start with the `# MVP Activity: ...` heading.
-- Published Date: use the source's published date verbatim. If the source has no date, write "(unknown)".
 
 ===== Activity Types reference =====
 {activity_types}
