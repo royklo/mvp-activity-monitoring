@@ -22,6 +22,7 @@ Written for a Microsoft program reviewer, not a peer engineer. No "you"-voice. R
 <Max 1000 characters. MVP-only context: why the content was created, what documentation gap it fills, any customer or community trigger. Never include confidential names.>
 
 ## Target Audience
+<One or more, one per line as `- <value>`. Pick every audience the content genuinely serves.>
 - <IT Pro | Developer | Technical Decision Maker | Business Decision Maker | Student | Other>
 
 ## Published Date

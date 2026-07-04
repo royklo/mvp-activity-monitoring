@@ -231,7 +231,7 @@ def call_github_models(prompt: str, token: str, model: str) -> str:
         json={
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
+            "temperature": 0,
         },
         timeout=90,
     )
@@ -270,11 +270,12 @@ Return ONLY the filled-in markdown from the template below. Preserve the exact s
 
 Rules:
 - Activity Type: default "Blog". Only choose another value if the source clearly matches it (e.g. a podcast RSS -> "Podcast"; a YouTube/Vimeo feed -> "Webinar/Online Training/Video/Livestream"; an event or session page -> "Speaker/Presenter at Microsoft Event" or "Speaker/Presenter at Third-party Event"; an open-source repo -> "Open Source/Project/Sample code/Tools"). Pick verbatim from the Activity Types reference below.
-- Primary / Additional Technology Area: pick ONE value verbatim from the Technology Areas reference below, chosen from what the content is actually about. Never fall back to a hard-coded default. If the content genuinely does not map to any listed area, write "(uncertain - please review)" for that field instead of guessing.
+- Primary Technology Area: pick exactly ONE value verbatim from the Technology Areas reference, the single product the content is most centrally about. If nothing fits, write "(uncertain - please review)".
+- Additional Technology Areas: fill this whenever the content clearly touches a second Microsoft product beyond the primary one (a Microsoft Graph JSON snippet, an Entra concept in an Intune post, a Sentinel query in an Azure post, etc.). Pick ONE value verbatim from the reference. Only write "N/A" when the content is genuinely single-product.
+- Target Audience: list EVERY audience the content serves, one per line as `- <value>`. Do not stop at one. Rule of thumb: hands-on ops/admin walkthrough = "IT Pro"; add "Developer" when there is code, API, or SDK usage; add "Technical Decision Maker" when the content covers governance, compliance, architecture, or policy choices; add "Business Decision Maker" for strategy/ROI content; add "Student" for beginner tutorials. Most technical posts on a MVP blog serve at least two audiences.
 - Title: max 100 characters.
 - Description: 2 short paragraphs, max 1000 characters total. Paragraph 1 = what the content covers; paragraph 2 = impact. Program-reviewer voice, not peer-to-peer.
 - Private Description: MVP-only context, max 1000 characters. One honest sentence is fine if nothing extra to add.
-- Target Audience: infer from the content. Choose "Developer" for code/API-heavy content, "Technical Decision Maker" for governance or architecture, "Business Decision Maker" for strategy/ROI content, "IT Pro" for hands-on ops/admin content, "Student" for beginner tutorials. Never fall back to a hard-coded default; pick what actually fits.
 - Role: default "Author" (use "Contributor" only if the MVP was not the primary creator). Special enums per type: Mentorship/Coaching = Organizer | Mentor | Other; User Group Owner = Organizer | Other.
 - Quantity: always 1.
 - Activity URL: use the Source URL verbatim.
