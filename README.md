@@ -84,6 +84,32 @@ Both are free.
 
 That's the entire setup. The nightly workflow runs at 03:00 UTC on the default schedule; trigger it manually the first time via `Actions` → `MVP activity monitor` → `Run workflow` to confirm it works.
 
+## Optional: pull attendance from Where My MVPs At?
+
+[Where My MVPs At?](https://wheremymvps.at/) exposes a PAT-authenticated `/api/v1/speakers` endpoint. Enable this and the workflow will look up your attendance records nightly and open PRs for any new conferences you're linked to.
+
+### 1. Regenerate your PAT with the `speakers:read` scope
+
+Sign in at [wheremymvps.at/api-console](https://wheremymvps.at/api-console). Under **PAT Management**, tick the `speakers:read` scope (and `conferences:read` if not already selected), then click **Regenerate PAT**. Copy the new token — it's shown once.
+
+### 2. Store the PAT as a repo secret
+
+`Settings` → `Secrets and variables` → `Actions` → `New repository secret`:
+- **Name:** `WHEREMYMVPSAT_PAT`
+- **Value:** the token from step 1
+
+### 3. Enable in `config.yml`
+
+```yaml
+wheremymvpsat:
+  enabled: true
+  user_id: royklo   # your wheremymvps.at handle (case-sensitive, no @)
+```
+
+`user_id` must exactly match the `userId` field the API uses for your account — check by browsing to your own profile page on wheremymvps.at and looking at the URL slug. It cannot be auto-discovered because the `/api/v1/pat` endpoint doesn't include it.
+
+On each run the script will fetch every attendance record where `userId eq '<yours>'`, enrich each conferenceId with details from `/api/v1/conferences`, and pass one activity item per conference through the same pipeline as RSS items. The model chooses between `Speaker/Presenter at Microsoft Event` and `Speaker/Presenter at Third-party Event` based on the conference name; you correct it in the PR if needed.
+
 ## How the PR review flow works
 
 Each run that finds new content opens a **fresh PR on its own branch**, so if you skip a night the older PRs still sit there waiting. Branches look like:

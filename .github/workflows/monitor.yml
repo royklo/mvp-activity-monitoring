@@ -28,6 +28,7 @@ jobs:
         id: monitor
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHEREMYMVPSAT_PAT: ${{ secrets.WHEREMYMVPSAT_PAT }}
         run: python scripts/monitor.py
 
       - name: Compute branch name

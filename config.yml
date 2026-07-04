@@ -19,3 +19,10 @@ start_date: 2026-06-25
 
 auto_merge: false
 model: openai/gpt-4o
+
+# Optional: pull the MVP's attendance records from https://wheremymvps.at
+# Requires a PAT with the speakers:read scope stored as the Actions
+# secret WHEREMYMVPSAT_PAT. Set user_id to your own wheremymvps.at handle.
+wheremymvpsat:
+  enabled: false
+  # user_id: royklo

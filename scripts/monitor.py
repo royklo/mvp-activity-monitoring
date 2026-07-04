@@ -76,6 +76,70 @@ def gather_items(sources: list[str]):
         }
 
 
+def gather_wheremymvpsat(config: dict):
+    wmma = config.get("wheremymvpsat") or {}
+    if not wmma.get("enabled"):
+        return
+    user_id = wmma.get("user_id")
+    if not user_id:
+        print("! wheremymvpsat.enabled=true but user_id is unset", file=sys.stderr)
+        return
+    pat = os.environ.get("WHEREMYMVPSAT_PAT")
+    if not pat:
+        print("! wheremymvpsat.enabled=true but WHEREMYMVPSAT_PAT is unset", file=sys.stderr)
+        return
+    base = wmma.get("base_url", "https://wheremymvps.at/api/v1").rstrip("/")
+    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/json"}
+
+    try:
+        r = httpx.get(f"{base}/speakers", params={"$filter": f"userId eq '{user_id}'"}, headers=headers, timeout=30)
+        r.raise_for_status()
+        rows = r.json().get("value", [])
+    except httpx.HTTPError as exc:
+        print(f"! wheremymvpsat /speakers failed: {exc}", file=sys.stderr)
+        return
+    if not rows:
+        return
+
+    conf_ids = sorted({row["conferenceId"] for row in rows if row.get("conferenceId")})
+    conferences: dict[str, dict] = {}
+    if conf_ids:
+        try:
+            or_clause = " or ".join(f"id eq '{cid}'" for cid in conf_ids)
+            r = httpx.get(f"{base}/conferences", params={"$filter": or_clause}, headers=headers, timeout=30)
+            r.raise_for_status()
+            for c in r.json().get("value", []):
+                if isinstance(c, dict) and c.get("id"):
+                    conferences[c["id"]] = c
+        except httpx.HTTPError as exc:
+            print(f"! wheremymvpsat /conferences failed: {exc}", file=sys.stderr)
+
+    for row in rows:
+        conf = conferences.get(row.get("conferenceId", ""), {})
+        merged = {"speaker": row, "conference": conf}
+        stable = conf.get("website") or f"wmma://conference/{row.get('conferenceId')}/user/{user_id}"
+        st = _parse_iso_struct(conf.get("startDate"))
+        yield {
+            "url": stable,
+            "title": conf.get("name") or f"Conference {row.get('conferenceId', '?')}",
+            "summary": json.dumps(merged, default=str, ensure_ascii=False)[:2000],
+            "published": conf.get("startDate", ""),
+            "published_parsed": st,
+            "source": "wheremymvpsat",
+        }
+
+
+def _parse_iso_struct(iso_date: str | None):
+    if not iso_date:
+        return None
+    try:
+        d = date.fromisoformat(iso_date[:10])
+    except ValueError:
+        return None
+    import time as _time
+    return _time.struct_time((d.year, d.month, d.day, 0, 0, 0, 0, 0, 0))
+
+
 def _fetch_page(url: str) -> str | None:
     try:
         r = httpx.get(url, timeout=20, follow_redirects=True)
@@ -182,8 +246,20 @@ ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
 def build_prompt(item: dict, template: str) -> str:
     tech_areas = TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
     activity_types = ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
+    source_note = ""
+    if item.get("source") == "wheremymvpsat":
+        source_note = (
+            "\nSource: wheremymvps.at attendance record. The Summary field is a "
+            "JSON object with 'speaker' (userId, userName, status) and 'conference' "
+            "(name, location, country, startDate, endDate, description, topics, "
+            "website). Choose Activity Type = 'Speaker/Presenter at Microsoft Event' "
+            "if the conference name matches a known Microsoft event (Build, Ignite, "
+            "Inspire, MVP Summit, RD Summit, MLSA Summit); otherwise "
+            "'Speaker/Presenter at Third-party Event'. Use conference.startDate for "
+            "Published Date. Use conference.website for Activity URL if present."
+        )
     return f"""You are drafting a Microsoft MVP activity tracking entry from a piece of online content.
-
+{source_note}
 Source item:
 - URL: {item['url']}
 - Title: {item['title']}
@@ -228,8 +304,9 @@ def main() -> int:
     start_date = parse_start_date(config.get("start_date"))
     model = config.get("model") or "openai/gpt-4o"
 
-    if not sources:
-        print("config.yml has no sources - nothing to do")
+    wmma_enabled = bool((config.get("wheremymvpsat") or {}).get("enabled"))
+    if not sources and not wmma_enabled:
+        print("config.yml has no sources and wheremymvpsat is disabled - nothing to do")
         return 0
 
     token = os.environ.get("GITHUB_TOKEN")
@@ -240,17 +317,23 @@ def main() -> int:
     template = TEMPLATE_PATH.read_text()
     seen = load_state()
 
+    def iter_all():
+        yield from gather_items(sources)
+        yield from gather_wheremymvpsat(config)
+
     new_items = []
     # start_date and exclude misses don't get marked seen, so loosening
     # either config value later resurfaces the items on the next run.
-    for item in gather_items(sources):
+    for item in iter_all():
         if not item["url"] or item["url"] in seen:
             continue
         if not is_after_start_date(item, start_date):
             continue
         if matches_exclude(item, exclude_keywords):
             continue
-        if not matches_keywords(item, keywords):
+        # wheremymvps.at rows already scope to this MVP via PAT+userId,
+        # so the include-keyword filter would only get in the way.
+        if item.get("source") != "wheremymvpsat" and not matches_keywords(item, keywords):
             seen.add(item["url"])
             continue
         new_items.append(item)
