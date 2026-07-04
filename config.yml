@@ -4,7 +4,7 @@
 # One entry per feed URL or page URL. Feeds are auto-detected; anything
 # that isn't a feed is fetched as a plain HTML page.
 sources:
-  - https://example.com/feed.xml
+  - https://rksolutions.nl/feed.xml
   # - https://anchor.fm/your-podcast/rss
   # - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
   # - https://someevent.example.com/your-session
@@ -18,9 +18,7 @@ sources:
 # uniquely identify your content, so only items about you or by you
 # become activity entries.
 keywords:
-  - Roy Klooster
-  - royklo
-  - "@royklooster"
+ # - Roy Klooster
 
 # When true, the nightly PR is auto-merged as soon as it's mergeable.
 # When false (default), you review every draft before it lands on main.
