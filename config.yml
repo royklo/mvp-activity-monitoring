@@ -9,21 +9,18 @@ sources:
   # - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
   # - https://someevent.example.com/your-session
 
-# Only items whose title or summary contains at least one of these
-# (case-insensitive) become MVP activity entries. Leave empty to capture
-# every new item.
+# Keywords the workflow filters on. For sources you author yourself
+# (your own blog feed, your own YouTube feed), leave this empty to
+# capture everything you publish.
+#
+# For sources you do NOT own (a community aggregator, an event site,
+# a co-host's podcast feed), put your own name and any handles that
+# uniquely identify your content, so only items about you or by you
+# become activity entries.
 keywords:
-  - intune
-  - entra
-  - microsoft graph
-  - microsoft 365
-
-# Defaults used when the model can't infer a value from the content.
-defaults:
-  primary_technology_area: Microsoft Intune
-  additional_technology_areas: Microsoft Graph
-  target_audience:
-    - IT Pro
+  - Roy Klooster
+  - royklo
+  - "@royklooster"
 
 # When true, the nightly PR is auto-merged as soon as it's mergeable.
 # When false (default), you review every draft before it lands on main.

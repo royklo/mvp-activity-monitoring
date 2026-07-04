@@ -25,27 +25,40 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run monitor
+        id: monitor
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/monitor.py
 
+      - name: Compute branch name
+        id: branch
+        if: steps.monitor.outputs.has_new == 'true'
+        run: |
+          ts=$(date -u +%Y-%m-%d-%H%M%S)
+          echo "name=mvp-monitor/${ts}-${{ steps.monitor.outputs.types }}" >> "$GITHUB_OUTPUT"
+
       - name: Read auto_merge flag
         id: cfg
+        if: steps.monitor.outputs.has_new == 'true'
         run: |
           echo "auto_merge=$(python -c "import yaml; print(str(yaml.safe_load(open('config.yml')).get('auto_merge', False)).lower())")" >> "$GITHUB_OUTPUT"
 
-      - name: Create or update pull request
+      - name: Create pull request
         id: pr
+        if: steps.monitor.outputs.has_new == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
-          commit-message: "chore: nightly MVP activity update"
-          title: "MVP activities: new content detected"
+          commit-message: "chore: MVP activities (${{ steps.monitor.outputs.types }})"
+          title: "MVP activities: ${{ steps.monitor.outputs.types }}"
           body: |
-            Automated MVP activity capture from the nightly monitor.
+            Automated MVP activity capture from the monitor.
 
-            Review each generated file in `activities/`, fill in `Number of Views`
-            from your analytics, tweak wording if needed, and merge.
-          branch: mvp-monitor/nightly
+            Types detected in this run: `${{ steps.monitor.outputs.types }}`.
+
+            Review each generated file in `activities/`, fill in any
+            "(fill from analytics before submitting)" placeholders, tweak
+            wording if needed, and merge.
+          branch: ${{ steps.branch.outputs.name }}
           delete-branch: true
 
       - name: Enable auto-merge

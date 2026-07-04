@@ -25,33 +25,35 @@ Fork the repo to your own GitHub account (or click **Use this template**). Publi
 
 ```yaml
 # Sources: any RSS feed URL or plain page URL. The workflow auto-detects
-# whether a URL is a feed or a regular page.
+# whether a URL is a feed or a regular page. Mix your own feeds with
+# community aggregators, podcast feeds you appear on, or event sites
+# that publish session catalogs.
 sources:
   - https://yourblog.example.com/feed.xml
   - https://anchor.fm/your-podcast/rss
   - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
-  - https://someevent.example.com/your-session
+  - https://community-aggregator.example.com/feed.xml
+  - https://someevent.example.com/sessions
 
-# Keywords: only items whose title or summary contains at least one of
-# these (case-insensitive) become MVP activity entries. Leave empty to
-# capture everything.
+# Keywords the workflow filters on.
+#
+# - For sources you author yourself (your own blog, your own YouTube),
+#   leave this empty - everything you publish is by definition yours.
+# - For sources you do NOT own (community aggregators, event catalogs,
+#   a co-host's podcast feed), list your own name and any handles that
+#   uniquely identify your content, so only items about or by you
+#   become activity entries.
 keywords:
-  - intune
-  - entra
-  - microsoft graph
+  - Roy Klooster
+  - royklo
+  - "@royklooster"
 
-# Default technology areas — used when the model can't confidently pick
-# one from the content itself.
-defaults:
-  primary_technology_area: Microsoft Intune
-  additional_technology_areas: Microsoft Graph
-  target_audience:
-    - IT Pro
-
-# Auto-merge the nightly PR when no conflicts exist. Set to false if you
+# Auto-merge the nightly PR when no conflicts exist. Leave false if you
 # want to review every entry before it lands on main.
 auto_merge: false
 ```
+
+The workflow does **not** apply default technology areas or a default target audience. The model picks Primary/Additional Technology Area and Target Audience from what each individual piece of content is actually about, using the full portal enum in `references/technology-areas.md`. If a source doesn't clearly map to one area, the field is written as `(uncertain - please review)` in the PR — you fill it in during review.
 
 ### 3. Enable the two GitHub features the workflow needs
 
@@ -69,14 +71,60 @@ That's the entire setup. The nightly workflow runs at 03:00 UTC on the default s
 
 ## How the PR review flow works
 
-After a run finds new content:
+Each run that finds new content opens a **fresh PR on its own branch**, so if you skip a night the older PRs still sit there waiting. Branches look like:
 
-- A branch called `mvp-monitor/nightly` is created (or updated).
-- A PR is opened against `main` with one markdown file per activity in `activities/`.
-- If `auto_merge: true`, the PR merges as soon as it's mergeable.
-- If `auto_merge: false`, review the draft, tweak the wording, fill in `Number of Views` from your analytics, and merge.
+```
+mvp-monitor/2026-07-04-183021-blog
+mvp-monitor/2026-07-05-183017-blog-event
+mvp-monitor/2026-07-06-183024-podcast
+```
 
-Merged files stay in `activities/` as your log. Everything already processed is tracked in `.state/seen.json` so the next run skips it.
+The suffix is a slug of the activity types the run detected (`blog`, `event`, `podcast`, `webinar`, `opensource`, `mentorship`, `usergroup`, `feedback`, `support`, `product-feedback`), so at a glance you know what's in the PR.
+
+If `auto_merge: true`, each PR merges as soon as it's mergeable. If `auto_merge: false` (the default), review the draft first — see the next section.
+
+Merged files stay in `activities/` as your permanent log. Everything already processed is tracked in `.state/seen.json` so the next run skips it.
+
+## Editing an activity before you merge
+
+Every draft is written by a language model, so before it goes into your MVP portal you almost always want to tweak the wording, fill in analytics numbers, or fix a wrong Technology Area pick. Two ways:
+
+### Option A — edit in the GitHub web UI (fastest for small tweaks)
+
+1. Open the PR that the workflow created.
+2. Click the file in `activities/` that you want to change.
+3. Click the pencil icon in the top right of the file view.
+4. Edit the markdown directly - fix wording, replace `(fill from analytics before submitting)` with real numbers, correct a Technology Area, add or remove a Target Audience line, change the Activity Type if the model guessed wrong.
+5. **Commit directly to the PR branch** (choose "Commit directly to the `mvp-monitor/…` branch" — do not open a new PR).
+6. Merge when you're happy.
+
+### Option B — check out the branch locally (better for bigger edits or multiple files)
+
+```bash
+# grab the branch the workflow just pushed
+git fetch origin
+git checkout mvp-monitor/2026-07-04-183021-blog
+
+# edit as many files as you want
+code activities/2026-07-04-*.md
+
+# push the edits back to the PR
+git add activities/
+git commit -m "review: polish MVP activity drafts"
+git push
+```
+
+The PR updates in place. Merge when it's ready.
+
+### What to check before you merge
+
+- **Description and Private Description** read naturally and don't fabricate anything the source doesn't say.
+- **Number of Views** (or Livestream views / On-demand views / Number of sessions / In-Person Attendees for non-blog types) is replaced with a real number if you have one, or left as the placeholder if you don't - the placeholder is a signal to yourself when you paste into the portal.
+- **Primary / Additional Technology Area** points to what the content actually covers - the model uses only what's in `references/technology-areas.md`, but it can still pick the wrong sibling within a category.
+- **Activity Type** matches the source (Blog vs. Podcast vs. Speaker/Presenter at …). Fix here if the auto-detect got it wrong; the type-specific fields section below it should match too.
+- **Target Audience** matches who the content is for. Remove or add audience lines as needed.
+
+Once merged, copy each section of the file into the corresponding MVP portal form field and submit.
 
 ## Adjusting the schedule
 

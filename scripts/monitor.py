@@ -28,6 +28,23 @@ TEMPLATE_PATH = ROOT / "templates" / "activity_template.md"
 
 MODELS_ENDPOINT = "https://models.github.ai/inference/chat/completions"
 
+# Short, filesystem-safe branch-name slugs per Activity Type. Kept short
+# so a mixed-type run produces a readable branch like
+# "mvp-monitor/2026-07-04-183021-blog-event".
+ACTIVITY_TYPE_SLUGS = {
+    "Blog": "blog",
+    "Podcast": "podcast",
+    "Webinar/Online Training/Video/Livestream": "webinar",
+    "Content Feedback and Editing": "feedback",
+    "Online Support": "support",
+    "Open Source/Project/Sample code/Tools": "opensource",
+    "Product Feedback": "product-feedback",
+    "Mentorship/Coaching": "mentorship",
+    "Speaker/Presenter at Microsoft Event": "event",
+    "Speaker/Presenter at Third-party Event": "event",
+    "User Group Owner": "usergroup",
+}
+
 
 def load_config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text()) or {}
@@ -136,8 +153,7 @@ TECH_AREAS_PATH = ROOT / "references" / "technology-areas.md"
 ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
 
 
-def build_prompt(item: dict, defaults: dict, template: str) -> str:
-    defaults_json = json.dumps(defaults or {}, indent=2)
+def build_prompt(item: dict, template: str) -> str:
     tech_areas = TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
     activity_types = ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
     return f"""You are drafting a Microsoft MVP activity tracking entry from a piece of online content.
@@ -152,12 +168,11 @@ Return ONLY the filled-in markdown from the template below. Preserve the exact s
 
 Rules:
 - Activity Type: default "Blog". Only choose another value if the source clearly matches it (e.g. a podcast RSS -> "Podcast"; a YouTube/Vimeo feed -> "Webinar/Online Training/Video/Livestream"; an event or session page -> "Speaker/Presenter at Microsoft Event" or "Speaker/Presenter at Third-party Event"; an open-source repo -> "Open Source/Project/Sample code/Tools"). Pick verbatim from the Activity Types reference below.
-- Primary / Additional Technology Area: pick ONE value verbatim from the Technology Areas reference below. Match the actual subject of the content. Fall back to these defaults only if you truly cannot tell:
-{defaults_json}
+- Primary / Additional Technology Area: pick ONE value verbatim from the Technology Areas reference below, chosen from what the content is actually about. Never fall back to a hard-coded default. If the content genuinely does not map to any listed area, write "(uncertain - please review)" for that field instead of guessing.
 - Title: max 100 characters.
 - Description: 2 short paragraphs, max 1000 characters total. Paragraph 1 = what the content covers; paragraph 2 = impact. Program-reviewer voice, not peer-to-peer.
 - Private Description: MVP-only context, max 1000 characters. One honest sentence is fine if nothing extra to add.
-- Target Audience: default "IT Pro". Add "Developer" if content is code/API-heavy. Add "Technical Decision Maker" if content covers governance or architecture.
+- Target Audience: infer from the content. Choose "Developer" for code/API-heavy content, "Technical Decision Maker" for governance or architecture, "Business Decision Maker" for strategy/ROI content, "IT Pro" for hands-on ops/admin content, "Student" for beginner tutorials. Never fall back to a hard-coded default; pick what actually fits.
 - Role: default "Author" (use "Contributor" only if the MVP was not the primary creator). Special enums per type: Mentorship/Coaching = Organizer | Mentor | Other; User Group Owner = Organizer | Other.
 - Quantity: always 1.
 - Activity URL: use the Source URL verbatim.
@@ -181,7 +196,6 @@ def main() -> int:
     config = load_config()
     sources = config.get("sources") or []
     keywords = config.get("keywords") or []
-    defaults = config.get("defaults") or {}
     model = config.get("model") or "openai/gpt-4o"
 
     if not sources:
@@ -212,19 +226,40 @@ def main() -> int:
 
     ACTIVITIES.mkdir(exist_ok=True)
     today = date.today().isoformat()
+    types_found: set[str] = set()
     for item in new_items:
         try:
-            md = call_github_models(build_prompt(item, defaults, template), token, model)
+            md = call_github_models(build_prompt(item, template), token, model)
         except httpx.HTTPError as exc:
             print(f"! model call failed for {item['url']}: {exc}", file=sys.stderr)
             continue
         path = ACTIVITIES / f"{today}-{slug_from_url(item['url'])}.md"
         path.write_text(md.rstrip() + "\n")
         seen.add(item["url"])
+        activity_type = _extract_activity_type(md)
+        if activity_type:
+            types_found.add(activity_type)
         print(f"wrote {path.relative_to(ROOT)}")
 
     save_state(seen)
+    _emit_workflow_outputs(types_found)
     return 0
+
+
+def _extract_activity_type(md: str) -> str | None:
+    m = re.search(r"^##\s+Activity Type\s*\n+([^\n]+)", md, re.M)
+    return m.group(1).strip() if m else None
+
+
+def _emit_workflow_outputs(types_found: set[str]) -> None:
+    """Write branch-suffix and has_new to $GITHUB_OUTPUT for the workflow."""
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if not output_path:
+        return
+    slugs = sorted({ACTIVITY_TYPE_SLUGS.get(t, "other") for t in types_found}) or ["empty"]
+    with open(output_path, "a") as f:
+        f.write(f"has_new={'true' if types_found else 'false'}\n")
+        f.write(f"types={'-'.join(slugs)}\n")
 
 
 def _self_check() -> None:
@@ -238,6 +273,13 @@ def _self_check() -> None:
     assert _extract_meta_description(
         '<meta name="description" content="A summary here">'
     ) == "A summary here"
+    assert _extract_activity_type("## Activity Type\nBlog\n") == "Blog"
+    assert _extract_activity_type(
+        "# MVP Activity: X\n\n## Activity Type\nPodcast\n\n## Title\nY"
+    ) == "Podcast"
+    assert _extract_activity_type("## Title\nNo activity type here") is None
+    assert ACTIVITY_TYPE_SLUGS["Speaker/Presenter at Microsoft Event"] == "event"
+    assert ACTIVITY_TYPE_SLUGS["Speaker/Presenter at Third-party Event"] == "event"
     print("self-check ok")
 
 
