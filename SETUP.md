@@ -5,8 +5,11 @@
 ## 1. Fork the repo
 
 - [ ] Click **Fork** on <https://github.com/royklo/mvp-activity-monitoring> (or **Use this template** for a clean history)
+- [ ] Pick **Public** or **Private**
 
-Public repo = unlimited Actions minutes. Private = 2,000 min/month free (a run costs seconds).
+> **Private is recommended** if you'd rather review and polish drafts before anything about your activities is publicly visible. Nothing in this tool needs to be public - everything works the same either way.
+>
+> Cost: public repos get unlimited Actions minutes, private repos get 2,000 min/month free (a run costs seconds).
 
 ## 2. Enable Actions permissions
 

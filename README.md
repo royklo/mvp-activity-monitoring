@@ -25,6 +25,8 @@ The generated markdown mirrors the MVP portal form 1:1: Activity Type, Primary/A
 
 **Full step-by-step checklist:** **[SETUP.md](SETUP.md)** — fork, permissions, config, PAT secret, first run.
 
+> **Public or private repo?** Either works, same features. Private is recommended if you'd rather review and polish drafts before anything about your activities is publicly visible.
+
 Quick summary of the three things you'll actually edit:
 
 ### `config.yml` — sources and filters
