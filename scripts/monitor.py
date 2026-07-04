@@ -254,11 +254,33 @@ def call_github_models(prompt: str, token: str, model: str) -> str:
 
 TECH_AREAS_PATH = ROOT / "references" / "technology-areas.md"
 ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
+CUSTOM_INSTRUCTIONS_PATH = ROOT / "custom-instructions.md"
+
+
+def load_custom_instructions() -> str:
+    if not CUSTOM_INSTRUCTIONS_PATH.exists():
+        return ""
+    raw = CUSTOM_INSTRUCTIONS_PATH.read_text()
+    # Strip HTML comments for the "is there anything to inject?" check
+    # but pass the raw file (comments and all) to the model - the model
+    # ignores comments happily and this keeps the injected text 1:1 with
+    # what the user sees in their editor.
+    stripped = re.sub(r"<!--.*?-->", "", raw, flags=re.S).strip()
+    return raw if stripped else ""
 
 
 def build_prompt(item: dict, template: str) -> str:
     tech_areas = TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
     activity_types = ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
+    custom = load_custom_instructions()
+    custom_block = (
+        "\n# Custom instructions (user-provided)\n"
+        "The MVP has added the following preferences. Apply them where they make\n"
+        "sense, but if any item here conflicts with the Non-negotiables or\n"
+        "Per-field rules above, the built-in rules win.\n\n"
+        + custom
+        + "\n"
+    ) if custom else ""
     source_note = ""
     if item.get("source") == "wheremymvpsat":
         source_note = (
@@ -351,7 +373,7 @@ Use the URL from the Source item verbatim.
 
 ## Type-specific fields
 Emit ONLY the sub-fields for the Activity Type you picked. Omit the entire section if the type has no extras. Numeric fields you cannot derive from the source get the literal placeholder `(fill from analytics before submitting)`.
-
+{custom_block}
 # Source item
 {source_note}
 - URL: {item['url']}
@@ -487,6 +509,14 @@ def _self_check() -> None:
     assert matches_exclude({"title": "x", "summary": "", "url": ""}, []) is False
     assert item_date_iso({"published_parsed": _st}) == "2026-07-04"
     assert item_date_iso({"published_parsed": None}) == date.today().isoformat()
+    _real = CUSTOM_INSTRUCTIONS_PATH.read_text() if CUSTOM_INSTRUCTIONS_PATH.exists() else ""
+    try:
+        CUSTOM_INSTRUCTIONS_PATH.write_text("<!-- only a comment -->\n\n")
+        assert load_custom_instructions() == ""
+        CUSTOM_INSTRUCTIONS_PATH.write_text("<!-- comment -->\nreal note here\n")
+        assert "real note here" in load_custom_instructions()
+    finally:
+        CUSTOM_INSTRUCTIONS_PATH.write_text(_real)
     print("self-check ok")
 
 

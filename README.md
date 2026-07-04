@@ -84,6 +84,33 @@ Both are free.
 
 That's the entire setup. The nightly workflow runs at 03:00 UTC on the default schedule; trigger it manually the first time via `Actions` → `MVP activity monitor` → `Run workflow` to confirm it works.
 
+## Customising the model's behaviour (`custom-instructions.md`)
+
+Every run builds a model prompt with fixed sections: role, non-negotiables (no fabrication, verbatim enums, no frontmatter), a 7-step procedure, and one guidance block per template field. Those aren't user-editable — they exist so drafts stay valid MVP portal entries no matter who forked the repo.
+
+But you can add your own preferences on top by editing **`custom-instructions.md`** at the repo root. If the file has any real content outside HTML comments, its contents are appended to the prompt as a `## Custom instructions (user-provided)` section, right before the source item. If the file is empty (or contains only comments, which is the default state), the injection is skipped and the prompt runs unchanged.
+
+**Good uses for the file:**
+
+```md
+- Prefer "Microsoft Entra ID" over "Azure AD" whenever picking a Technology Area or writing the Description.
+- Content published under https://lab.rksolutions.nl is beginner-friendly; always include "Student" in Target Audience for those URLs.
+- My blog voice is direct and practical - avoid "This blog post explores..." style openings; open with the concrete problem.
+- Don't mention Inforcer by name in Description or Private Description.
+```
+
+**Bad uses (these will fight the built-in guardrails and produce broken output):**
+
+```md
+- Fill Additional Technology Areas with "Microsoft 365" whenever nothing else fits.
+- Add a YAML frontmatter block with source_url and detected_on.
+- Make up a Number of Views based on how popular the topic sounds.
+```
+
+The prompt tells the model: *"if your custom instructions conflict with the built-in rules, the built-in rules win"*. That's a safety net, not a licence to be careless — write your custom instructions like additions, not overrides.
+
+Commit the file to `main` and the next run picks it up. Reset to a bare-comment file (the version shipped in the repo) to disable.
+
 ## Optional: pull attendance from Where My MVPs At?
 
 [Where My MVPs At?](https://wheremymvps.at/) exposes a PAT-authenticated `/api/v1/speakers` endpoint. Enable this and the workflow will look up your attendance records nightly and open PRs for any new conferences you're linked to.
