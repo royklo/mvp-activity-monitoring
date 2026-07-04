@@ -21,6 +21,17 @@ The generated markdown mirrors the MVP portal form 1:1: Activity Type, Primary/A
 
 ---
 
+## Stay in sync with template updates
+
+"Use this template" creates an independent copy — updates to this template don't auto-flow into your instance. To hear about new versions:
+
+- **⭐ Star** the template repo — bookmark, appears in your Stars list. Doesn't send notifications.
+- **👁 Watch → Custom → Releases** — this is the one that sends you an email whenever a new version is tagged (every merge to main on the template repo publishes a release). Recommended.
+
+When you want to pull a template update into your instance, see the **"Getting updates from the template"** section in [SETUP.md](SETUP.md).
+
+---
+
 ## Setup
 
 **Full step-by-step checklist:** **[SETUP.md](SETUP.md)** — fork, permissions, config, PAT secret, first run.
