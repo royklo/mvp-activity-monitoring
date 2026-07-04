@@ -91,19 +91,24 @@ on:
 
 ## Adding a non-blog activity
 
-The template defaults to `Blog`. For a podcast, webinar, or event you attended, either:
-- Add the source URL and let the model detect the type from the page content, or
-- After the PR opens, edit the generated file and change `## Activity Type` before you merge.
+The template defaults to `Blog`, but the model picks a different Activity Type when the source clearly matches one (a podcast RSS feed, a YouTube feed, an event page, an open-source repo). After the PR opens you can also edit the generated file and change `## Activity Type` yourself before merging.
 
-Supported values per the MVP program:
-`Blog`, `Podcast`, `Webinar/online training`, `Content Feedback and Editing`, `Online support`, `OpenSource`, `Project`, `Sample Code`, `Tools`.
+Every Activity Type has slightly different follow-up fields. The template's **Type-specific fields** section lists them. Full reference:
+
+- **[references/activity-types.md](references/activity-types.md)** — every Activity Type and its per-type fields (Number of sessions, Livestream views, In-Person Attendees, Microsoft Event enum, etc.).
+- **[references/technology-areas.md](references/technology-areas.md)** — every Primary / Additional Technology Area value, grouped by portal category.
+
+Supported Activity Types (verbatim as they appear in the portal):
+`Blog`, `Podcast`, `Webinar/Online Training/Video/Livestream`, `Content Feedback and Editing`, `Online Support`, `Open Source/Project/Sample code/Tools`, `Product Feedback`, `Mentorship/Coaching`, `Speaker/Presenter at Microsoft Event`, `Speaker/Presenter at Third-party Event`, `User Group Owner`.
 
 ## What's in the repo
 
 ```
 .github/workflows/monitor.yml   # nightly workflow
-scripts/monitor.py              # single-file script, ~150 lines
-templates/activity_template.md  # exact MVP portal field layout
+scripts/monitor.py              # single-file script
+templates/activity_template.md  # MVP portal field layout
+references/activity-types.md    # per-type field reference
+references/technology-areas.md  # full tech area enum
 config.yml                      # your sources, keywords, defaults
 activities/                     # generated MD files (your log)
 .state/seen.json                # dedup state, committed by the workflow

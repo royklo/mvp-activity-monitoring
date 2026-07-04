@@ -132,8 +132,14 @@ def call_github_models(prompt: str, token: str, model: str) -> str:
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
+TECH_AREAS_PATH = ROOT / "references" / "technology-areas.md"
+ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
+
+
 def build_prompt(item: dict, defaults: dict, template: str) -> str:
     defaults_json = json.dumps(defaults or {}, indent=2)
+    tech_areas = TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
+    activity_types = ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
     return f"""You are drafting a Microsoft MVP activity tracking entry from a piece of online content.
 
 Source item:
@@ -142,21 +148,31 @@ Source item:
 - Summary / excerpt: {item['summary']}
 - Published (raw): {item['published']}
 
-Return ONLY the filled-in markdown from the template below. Preserve the exact structure and headings. Rules:
+Return ONLY the filled-in markdown from the template below. Preserve the exact structure and headings.
 
-- Activity Type: default "Blog". If the source clearly indicates otherwise (a podcast feed, video, event page), pick the matching value from the template.
-- Role: default "Author".
-- Quantity: always 1.
-- Number of Views: leave literally as "(fill from analytics before submitting)".
-- Description: 2 short paragraphs, max 1000 characters total. Paragraph 1 = what the content covers; paragraph 2 = impact.
-- Private Description: MVP-only context, max 1000 characters. If nothing meaningful to add, write one honest sentence.
-- Target Audience: if the content is code/API-heavy include "Developer"; if it covers governance or architecture include "Technical Decision Maker"; otherwise default to "IT Pro".
-- Primary / Additional Technology Area: pick the most relevant Microsoft product from the content itself. Fall back to these defaults only if you cannot tell from the source:
+Rules:
+- Activity Type: default "Blog". Only choose another value if the source clearly matches it (e.g. a podcast RSS -> "Podcast"; a YouTube/Vimeo feed -> "Webinar/Online Training/Video/Livestream"; an event or session page -> "Speaker/Presenter at Microsoft Event" or "Speaker/Presenter at Third-party Event"; an open-source repo -> "Open Source/Project/Sample code/Tools"). Pick verbatim from the Activity Types reference below.
+- Primary / Additional Technology Area: pick ONE value verbatim from the Technology Areas reference below. Match the actual subject of the content. Fall back to these defaults only if you truly cannot tell:
 {defaults_json}
+- Title: max 100 characters.
+- Description: 2 short paragraphs, max 1000 characters total. Paragraph 1 = what the content covers; paragraph 2 = impact. Program-reviewer voice, not peer-to-peer.
+- Private Description: MVP-only context, max 1000 characters. One honest sentence is fine if nothing extra to add.
+- Target Audience: default "IT Pro". Add "Developer" if content is code/API-heavy. Add "Technical Decision Maker" if content covers governance or architecture.
+- Role: default "Author" (use "Contributor" only if the MVP was not the primary creator). Special enums per type: Mentorship/Coaching = Organizer | Mentor | Other; User Group Owner = Organizer | Other.
+- Quantity: always 1.
+- Activity URL: use the Source URL verbatim.
+- Type-specific fields section: emit ONLY the sub-fields that match the chosen Activity Type. Omit the whole section if the type has no extras (see the template).
+- For any numeric field you cannot derive from the source (views, sessions, attendees), leave the literal placeholder "(fill from analytics before submitting)".
 - Use regular hyphens, never em-dashes.
 - Do not fabricate metrics, dates, or facts not present in the source item.
 
-Template:
+===== Activity Types reference =====
+{activity_types}
+
+===== Technology Areas reference =====
+{tech_areas}
+
+===== Template to fill =====
 {template}
 """
 
