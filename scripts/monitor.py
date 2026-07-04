@@ -317,7 +317,7 @@ def main() -> int:
     keywords = config.get("keywords") or []
     exclude_keywords = config.get("exclude_keywords") or []
     start_date = parse_start_date(config.get("start_date"))
-    model = config.get("model") or "openai/gpt-5"
+    model = config.get("model") or "openai/gpt-4.1"
 
     wmma_enabled = bool((config.get("wheremymvpsat") or {}).get("enabled"))
     if not sources and not wmma_enabled:

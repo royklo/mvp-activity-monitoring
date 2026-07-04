@@ -18,7 +18,8 @@ exclude_keywords:
 start_date: 2026-06-25
 
 auto_merge: false
-model: openai/gpt-5
+# openai/gpt-5 rejects temperature=0 so keep 4.1 unless you patch the call.
+model: openai/gpt-4.1
 
 # Optional: pull the MVP's attendance records from https://wheremymvps.at
 # Requires a PAT with the speakers:read scope stored as the Actions
