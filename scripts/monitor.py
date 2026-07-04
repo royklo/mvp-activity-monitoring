@@ -60,7 +60,8 @@ def gather_items(sources: list[str]):
                 yield {
                     "url": entry.get("link", source),
                     "title": (entry.get("title") or "").strip(),
-                    "summary": _strip_html(entry.get("summary", "")),
+                    "summary": _pick_body(entry),
+                    "tags": [t.get("term") for t in entry.get("tags", []) if t.get("term")],
                     "published": entry.get("published", ""),
                     "published_parsed": entry.get("published_parsed"),
                 }
@@ -72,8 +73,20 @@ def gather_items(sources: list[str]):
             "url": source,
             "title": _extract_title(page),
             "summary": _extract_meta_description(page),
+            "tags": [],
             "published": "",
         }
+
+
+def _pick_body(entry) -> str:
+    # Prefer entry.content[0].value (full body) over entry.summary (excerpt).
+    content = entry.get("content") or []
+    if content and isinstance(content, list):
+        raw = content[0].get("value") if isinstance(content[0], dict) else ""
+    else:
+        raw = entry.get("summary", "")
+    stripped = _strip_html(raw)
+    return stripped[:6000]  # cap so a huge post doesn't blow the prompt
 
 
 def gather_wheremymvpsat(config: dict):
@@ -263,7 +276,8 @@ def build_prompt(item: dict, template: str) -> str:
 Source item:
 - URL: {item['url']}
 - Title: {item['title']}
-- Summary / excerpt: {item['summary']}
+- Tags (from the feed): {', '.join(item.get('tags') or []) or '(none)'}
+- Body: {item['summary']}
 - Published (raw): {item['published']}
 
 Return ONLY the filled-in markdown from the template below. Preserve the exact structure and headings.
@@ -303,7 +317,7 @@ def main() -> int:
     keywords = config.get("keywords") or []
     exclude_keywords = config.get("exclude_keywords") or []
     start_date = parse_start_date(config.get("start_date"))
-    model = config.get("model") or "openai/gpt-4o"
+    model = config.get("model") or "openai/gpt-5"
 
     wmma_enabled = bool((config.get("wheremymvpsat") or {}).get("enabled"))
     if not sources and not wmma_enabled:
