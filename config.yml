@@ -34,7 +34,7 @@ exclude_keywords:
 # backlog of your blog to open as one huge PR. Items without a
 # parseable publish date always pass this check. Not written to seen,
 # so moving the date earlier later will surface older items again.
-start_date: 2026-07-01
+start_date: 2026-06-25
 
 # When true, the nightly PR is auto-merged as soon as it's mergeable.
 # When false (default), you review every draft before it lands on main.
