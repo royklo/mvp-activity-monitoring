@@ -15,7 +15,9 @@ Built for Microsoft MVPs. Every MVP already has the GitHub features this needs (
 
 The generated markdown mirrors the MVP portal form 1:1 — Activity Type, Primary/Additional Technology Area, Title, Description, Private Description, Target Audience, Published Date, Role, Number of Views, Quantity, Activity URL. You paste each section into the corresponding portal field. Done in under a minute per activity.
 
-## Setup (5 minutes)
+## Setup
+
+Quick summary below. For the full step-by-step checklist (including the wheremymvps.at PAT secret and custom instructions), see **[SETUP.md](SETUP.md)**.
 
 ### 1. Fork or copy this repository
 
