@@ -65,7 +65,7 @@ At [wheremymvps.at/api-console](https://wheremymvps.at/api-console):
 - [ ] `wheremymvpsat.user_id: <your-handle>` (from your profile URL slug, no `@`)
 - [ ] Commit + push
 
-> **Known upstream issue:** only 7 MVPs are currently visible in `/api/v1/speakers`. Enabling is safe — most users will just get zero rows until the maintainer fixes the data-population bug. See `TODO.md`.
+> **Known upstream issue:** only 7 MVPs are currently visible in `/api/v1/speakers`. Enabling is safe — most users will just get zero rows until the maintainer fixes the data-population bug. See [goldjg/WhereMyMVPsAt#2](https://github.com/goldjg/WhereMyMVPsAt/issues/2).
 
 ## 6. (Optional) Custom model instructions
 
