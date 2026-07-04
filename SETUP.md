@@ -1,111 +1,114 @@
 # Setup
 
-A one-pass checklist for standing up the workflow on your own fork. Should take about 10 minutes. Tick each item as you finish it.
+**~10 minutes. Tick as you go.**
 
-## 1. Fork or template the repo
+## 1. Fork the repo
 
-- [ ] Click **Fork** at the top of <https://github.com/royklo/mvp-activity-monitoring>, or click **Use this template** if you'd rather start with a clean commit history.
-- [ ] Clone your fork locally if you want to edit configs from a shell; otherwise every file below can be edited in the GitHub web UI.
+- [ ] Click **Fork** on <https://github.com/royklo/mvp-activity-monitoring> (or **Use this template** for a clean history)
 
-Repo can be public or private. Public gets you unlimited Actions minutes; private uses your free 2,000 min/month allowance (a nightly run costs a few seconds).
+Public repo = unlimited Actions minutes. Private = 2,000 min/month free (a run costs seconds).
 
 ## 2. Enable Actions permissions
 
-`Settings` -> `Actions` -> `General` -> **Workflow permissions**:
+`Settings → Actions → General → Workflow permissions`:
 
-- [ ] Select **Read and write permissions**.
-- [ ] Tick **Allow GitHub Actions to create and approve pull requests**.
+- [ ] **Read and write permissions**
+- [ ] **Allow GitHub Actions to create and approve pull requests**
 
-Without this the workflow will run but the PR-creation step at the end will fail with a 403.
+> Skip this and PR creation fails with 403.
 
-## 3. (Only if you set `auto_merge: true`) Allow auto-merge
+## 3. (Optional) Allow auto-merge
 
-`Settings` -> `General` -> scroll to **Pull Requests**:
+Only if you plan to set `auto_merge: true`.
 
-- [ ] Tick **Allow auto-merge**.
+`Settings → General → Pull Requests`:
 
-Skip this step if you want to review every PR by hand.
+- [ ] **Allow auto-merge**
 
 ## 4. Edit `config.yml`
 
-Open `config.yml` in the web UI (or your editor) and set:
+| Field | Set to |
+|---|---|
+| `sources` | Every RSS feed / page URL you want monitored |
+| `keywords` | Empty for your own feeds. Your name/handles for feeds you don't own. |
+| `exclude_keywords` | Substrings to drop (e.g. `sponsored`, employer name) |
+| `start_date` | YYYY-MM-DD — set this so your back-catalogue doesn't flood the first PR |
+| `auto_merge` | Leave `false` while you learn the drafts |
+| `model` | Default `openai/gpt-4.1` — anything from the [Models catalog](https://models.github.ai/catalog/models) works |
 
-- [ ] `sources:` — every RSS feed and page URL you want monitored. Feeds are auto-detected; non-feed URLs are fetched as HTML pages. Comment out the example entries you don't need.
-- [ ] `keywords:` — leave empty for sources you author yourself. For sources you don't own (community aggregators, event catalogs, a co-host's podcast), list your own name and handles so only your content passes.
-- [ ] `exclude_keywords:` — case-insensitive substrings dropped before the include check. Common uses: your day-job employer's name, "sponsored", any topic that doesn't count as MVP activity.
-- [ ] `start_date:` — YYYY-MM-DD lower bound. Set this before your first run so the initial PR doesn't try to backfill your entire archive.
-- [ ] `auto_merge:` — leave `false` while you're getting a feel for the drafts. Flip to `true` once you trust the output.
-- [ ] `model:` — default is `openai/gpt-4.1`. Any model from <https://models.github.ai/catalog/models> works. Note: `openai/gpt-5` rejects `temperature: 0` so it needs a code tweak in `call_github_models` before you can pick it here.
-- [ ] Commit + push if you edited locally. If you edited in the web UI, GitHub commits directly to `main`.
+- [ ] Commit + push (or edit in the web UI which commits directly)
 
-## 5. (Optional) Enable Where My MVPs At? conference sync
+> `openai/gpt-5` rejects `temperature: 0` — stick with `gpt-4.1` unless you patch `call_github_models`.
 
-Only do this section if you have a verified MVP account at <https://wheremymvps.at>.
+## 5. (Optional) wheremymvps.at conference sync
 
-### 5a. Generate a PAT with the `speakers:read` scope
+Only if you're a verified MVP at <https://wheremymvps.at>.
 
-- [ ] Sign in at <https://wheremymvps.at/api-console>.
-- [ ] Under **PAT Management**, tick both `speakers:read` and `conferences:read` scopes.
-- [ ] Click **Create PAT** (or **Regenerate PAT** if you already have one). Copy the token immediately — it's shown once.
+### 5a. Get a PAT
 
-### 5b. Store the PAT as a repo secret
+At [wheremymvps.at/api-console](https://wheremymvps.at/api-console):
 
-- [ ] `Settings` -> `Secrets and variables` -> `Actions` -> **New repository secret**.
-- [ ] Name: `WHEREMYMVPSAT_PAT`.
-- [ ] Value: paste the token from step 5a.
-- [ ] Click **Add secret**.
+- [ ] Tick `speakers:read` + `conferences:read` scopes
+- [ ] Click **Create PAT** (or **Regenerate PAT**). Copy immediately — shown once.
 
-The workflow reads this secret as an environment variable at run time; it's never written to logs or the repo.
+### 5b. Add repo secret
+
+`Settings → Secrets and variables → Actions → New repository secret`:
+
+- [ ] Name: `WHEREMYMVPSAT_PAT`
+- [ ] Value: paste the token
+- [ ] **Add secret**
 
 ### 5c. Enable in `config.yml`
 
-- [ ] Set `wheremymvpsat.enabled: true`.
-- [ ] Set `wheremymvpsat.user_id:` to your wheremymvps.at handle (visible on your profile page URL slug — no `@` prefix, case-sensitive).
-- [ ] Commit + push.
+- [ ] `wheremymvpsat.enabled: true`
+- [ ] `wheremymvpsat.user_id: <your-handle>` (from your profile URL slug, no `@`)
+- [ ] Commit + push
 
-Known issue while writing this: only 7 MVPs currently appear in the `/api/v1/speakers` collection even though the UI shows many more. See `TODO.md` for the follow-up on that. Enabling the integration today is safe (returns zero records for most users), just don't expect PRs until upstream fixes the data-population bug.
+> **Known upstream issue:** only 7 MVPs are currently visible in `/api/v1/speakers`. Enabling is safe — most users will just get zero rows until the maintainer fixes the data-population bug. See `TODO.md`.
 
-## 6. (Optional) Add your own model instructions
+## 6. (Optional) Custom model instructions
 
-- [ ] Open `custom-instructions.md`.
-- [ ] Replace the giant HTML comment with your own preferences (naming, voice, per-source rules). Examples in the file itself and in the README section **"Customising the model's behaviour"**.
-- [ ] Commit + push. Leave the file with only HTML comments to disable.
+- [ ] Open `custom-instructions.md`
+- [ ] Replace the HTML-comment block with your preferences (naming, voice, per-source rules)
+- [ ] Commit + push
 
-The custom-instructions block gets appended to the model prompt as a `## Custom instructions (user-provided)` section. Built-in guardrails (no fabrication, verbatim enums, no frontmatter, plain hyphens) always win in conflicts.
+Leave the file comment-only to disable. Built-in guardrails always win — see the file itself for good/bad examples.
 
-## 7. Trigger the first run manually
+## 7. First manual run
 
-- [ ] Go to `Actions` -> `MVP activity monitor` -> **Run workflow** -> **Run workflow** button.
-- [ ] Wait ~30 seconds for the run to complete. Green tick = OK.
-- [ ] Open the newly created PR (branch name looks like `mvp-monitor/2026-07-05-183021-blog`).
+`Actions → MVP activity monitor → Run workflow → Run workflow`:
 
-If no PR appeared, the workflow found nothing new — either your `start_date` filtered everything out, all items were already in `.state/seen.json`, or the sources returned no matches. Check the run log under **Actions** for details.
+- [ ] Wait ~30 seconds. Green tick = OK.
+- [ ] Open the new PR (`mvp-monitor/YYYY-MM-DD-…`)
 
-## 8. Review and merge the first PR
+> **No PR?** Nothing was new. `start_date` filtered everything, everything was already in `seen.json`, or sources returned no matches. Check the run log.
+
+## 8. Review + merge
 
 For each file in `activities/`:
 
-- [ ] Read the Description and Private Description for accuracy.
-- [ ] Fill in `Number of Views` (or per-type analytics) with real numbers from your analytics tool, or leave the placeholder if you don't track that.
-- [ ] Sanity-check Primary + Additional Technology Area — the model is anchored on your RSS tags, but occasionally picks a weak second area. `(no second area detected - please review)` means the model deliberately abstained; add one yourself if you disagree.
-- [ ] Confirm Target Audience covers every audience the content genuinely serves.
-- [ ] Fix Activity Type if the auto-detect got it wrong.
-- [ ] Merge the PR.
+- [ ] Description reads naturally, no fabrication
+- [ ] Replace `(fill from analytics before submitting)` with real numbers
+- [ ] Sanity-check Primary + Additional Technology Area
+- [ ] Confirm Target Audience covers every audience
+- [ ] Fix Activity Type if the auto-detect got it wrong
+- [ ] Merge
 
-Merged files stay in `activities/` as your permanent log. `.state/seen.json` is updated on the same PR, so tomorrow's run won't re-add anything you already merged.
+Merged files stay in `activities/` as your permanent log. `.state/seen.json` gets updated on the same PR so nothing gets re-added tomorrow.
 
-## 9. Confirm the nightly schedule
+## 9. Nightly cron
 
-- [ ] Nothing to do — the workflow now runs every day at 03:00 UTC. Adjust the cron in `.github/workflows/monitor.yml` if you want a different time.
+- [ ] Nothing — runs every 03:00 UTC. Edit the cron in `.github/workflows/monitor.yml` for a different time.
+
+---
 
 ## Troubleshooting
 
-**Run failed with 403 on PR creation** — you skipped step 2. Go back and tick both permissions.
-
-**Run succeeded but no PR appeared** — the `has_new` output was `false`. Either no new items, everything was filtered, or every item was already seen. Check the run log.
-
-**PR opened but the file has `(no second area detected)` / `(uncertain - please review)`** — the model flagged that field for you to fill by hand. That's the design, not a bug.
-
-**Model call fails with HTTP 400** — the `model:` value in `config.yml` might be one that doesn't accept `temperature: 0` (e.g. `openai/gpt-5`). Switch to `openai/gpt-4.1` or patch `call_github_models` in `scripts/monitor.py` to strip the temperature parameter.
-
-**wheremymvps.at returns zero rows** — either your `user_id` is wrong (check the exact handle from your profile URL), the PAT is missing the `speakers:read` scope, or you're hitting the current upstream data-population gap. See `TODO.md`.
+| Symptom | Fix |
+|---|---|
+| Run failed 403 on PR creation | You skipped step 2. Re-enable both workflow permissions. |
+| Run succeeded, no PR | `has_new=false`. Check the run log — nothing new, all filtered, or all in `seen.json`. |
+| `(no second area detected)` or `(uncertain - please review)` in the file | Design, not a bug. The model deliberately flagged that field for you to decide. |
+| Model call HTTP 400 | `model:` value doesn't accept `temperature: 0`. Switch to `openai/gpt-4.1` or strip the temperature param in `call_github_models`. |
+| wheremymvps.at returns zero rows | Wrong `user_id`, missing `speakers:read` scope, or upstream data-population gap (see `TODO.md`). |
