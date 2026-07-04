@@ -1,147 +1,96 @@
 # MVP Activity Monitoring
 
-**A GitHub Actions workflow that watches your blog, podcast, RSS feed, or any URL you care about and drafts Microsoft MVP program activity entries for you every night — as pull requests.**
+> **A nightly GitHub Actions workflow that turns your blog posts, podcasts, videos, and conference attendances into copy-paste-ready Microsoft MVP program activity entries — as pull requests.**
 
-Built for Microsoft MVPs. Every MVP already has the GitHub features this needs (Actions minutes on public repos, GitHub Models inference). Fork it, point it at your content, and stop retyping the same portal fields.
+Fork it, point it at your content, stop retyping portal fields.
+
+---
 
 ## What it does
 
-1. Runs on a nightly cron (03:00 UTC by default).
-2. Reads your `config.yml`: a list of URLs / RSS feeds and a list of keywords.
-3. Fetches each source, filters by keyword, skips anything already processed.
-4. For every new match, asks a language model (via GitHub Models) to draft a copy-paste-ready MVP portal entry using a fixed markdown template.
-5. Opens a pull request with the new file(s) in `activities/`.
-6. Optionally auto-merges the PR (opt-in via `auto_merge: true`), otherwise you review and merge by hand.
+- Runs nightly (03:00 UTC by default)
+- Reads `config.yml` for the sources and filters you set
+- Fetches each source, skips anything it's already processed
+- For every new item, asks a language model (via GitHub Models) to draft an MVP portal entry
+- Opens a PR with the new file(s) in `activities/`
+- You review, tweak, merge — then paste each field into the MVP portal
 
-The generated markdown mirrors the MVP portal form 1:1 — Activity Type, Primary/Additional Technology Area, Title, Description, Private Description, Target Audience, Published Date, Role, Number of Views, Quantity, Activity URL. You paste each section into the corresponding portal field. Done in under a minute per activity.
+The generated markdown mirrors the MVP portal form 1:1: Activity Type, Primary/Additional Technology Area, Title, Description, Private Description, Target Audience, Published Date, Role, Number of Views, Quantity, Activity URL.
+
+---
 
 ## Setup
 
-Quick summary below. For the full step-by-step checklist (including the wheremymvps.at PAT secret and custom instructions), see **[SETUP.md](SETUP.md)**.
+**Full step-by-step checklist:** **[SETUP.md](SETUP.md)** — fork, permissions, config, PAT secret, first run.
 
-### 1. Fork or copy this repository
+Quick summary of the three things you'll actually edit:
 
-Fork the repo to your own GitHub account (or click **Use this template**). Public or private, both work.
-
-### 2. Edit `config.yml`
+### `config.yml` — sources and filters
 
 ```yaml
-# Sources: any RSS feed URL or plain page URL. The workflow auto-detects
-# whether a URL is a feed or a regular page. Mix your own feeds with
-# community aggregators, podcast feeds you appear on, or event sites
-# that publish session catalogs.
 sources:
   - https://yourblog.example.com/feed.xml
   - https://anchor.fm/your-podcast/rss
   - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
-  - https://community-aggregator.example.com/feed.xml
-  - https://someevent.example.com/sessions
 
-# Keywords the workflow filters on.
-#
-# - For sources you author yourself (your own blog, your own YouTube),
-#   leave this empty - everything you publish is by definition yours.
-# - For sources you do NOT own (community aggregators, event catalogs,
-#   a co-host's podcast feed), list your own name and any handles that
-#   uniquely identify your content, so only items about or by you
-#   become activity entries.
-keywords:
-  - Roy Klooster
-  - royklo
-  - "@royklooster"
+keywords:            # leave empty for your own feeds
+  - Roy Klooster     # your name/handles for feeds you don't own
 
-# Auto-merge the nightly PR when no conflicts exist. Leave false if you
-# want to review every entry before it lands on main.
+exclude_keywords:    # optional
+  - inforcer
+
+start_date: 2026-07-01   # optional: skip your back-catalogue
+
 auto_merge: false
 ```
 
-The workflow does **not** apply default technology areas or a default target audience. The model picks Primary/Additional Technology Area and Target Audience from what each individual piece of content is actually about, using the full portal enum in `references/technology-areas.md`. If a source doesn't clearly map to one area, the field is written as `(uncertain - please review)` in the PR — you fill it in during review.
+| Field | What it does |
+|---|---|
+| `sources` | Feeds or plain URLs to monitor. Feeds auto-detected. |
+| `keywords` | Include filter. Empty = accept all. Set for feeds you don't own. |
+| `exclude_keywords` | Case-insensitive drop list. Applied before include. |
+| `start_date` | YYYY-MM-DD lower bound on publish date. |
+| `auto_merge` | Auto-merge nightly PRs if they're mergeable. |
 
-### Optional filters
+Technology Area and Target Audience are **not** in config — the model picks them per item from what the content actually is. If it can't decide, it writes `(uncertain - please review)` and you fill it in.
 
-Two more knobs in `config.yml`, both off by default:
+### `custom-instructions.md` — your voice and preferences
 
-```yaml
-exclude_keywords:
-  - inforcer          # posts that mention your day-job employer
-  - sponsored         # sponsored content that doesn't count as MVP activity
+Optional. If the file has any content outside HTML comments, it's appended to the model prompt as user hints.
 
-start_date: 2026-07-01  # only consider items published on/after this date
-```
-
-- **`exclude_keywords`** — case-insensitive substring match against title, summary, and URL. Any hit drops the item BEFORE the include-keyword check. Excluded items are not written to `seen.json`, so if you remove an exclude term later the old posts flow through again.
-- **`start_date`** — YYYY-MM-DD lower bound on published date. Useful when you first enable the workflow and don't want your entire back-catalogue to open as one huge PR. Items with no parseable date pass through (fail-open). Also not written to `seen.json`, so moving the date earlier later resurfaces older posts.
-
-### 3. Enable the two GitHub features the workflow needs
-
-Both are free.
-
-**A. Workflow permissions**
-`Settings` → `Actions` → `General` → **Workflow permissions**:
-- Select **Read and write permissions**.
-- Tick **Allow GitHub Actions to create and approve pull requests**.
-
-**B. Auto-merge (only if you set `auto_merge: true`)**
-`Settings` → `General` → scroll to **Pull Requests** → tick **Allow auto-merge**.
-
-That's the entire setup. The nightly workflow runs at 03:00 UTC on the default schedule; trigger it manually the first time via `Actions` → `MVP activity monitor` → `Run workflow` to confirm it works.
-
-## Customising the model's behaviour (`custom-instructions.md`)
-
-Every run builds a model prompt with fixed sections: role, non-negotiables (no fabrication, verbatim enums, no frontmatter), a 7-step procedure, and one guidance block per template field. Those aren't user-editable — they exist so drafts stay valid MVP portal entries no matter who forked the repo.
-
-But you can add your own preferences on top by editing **`custom-instructions.md`** at the repo root. If the file has any real content outside HTML comments, its contents are appended to the prompt as a `## Custom instructions (user-provided)` section, right before the source item. If the file is empty (or contains only comments, which is the default state), the injection is skipped and the prompt runs unchanged.
-
-**Good uses for the file:**
-
+**Good uses:**
 ```md
-- Prefer "Microsoft Entra ID" over "Azure AD" whenever picking a Technology Area or writing the Description.
-- Content published under https://lab.rksolutions.nl is beginner-friendly; always include "Student" in Target Audience for those URLs.
-- My blog voice is direct and practical - avoid "This blog post explores..." style openings; open with the concrete problem.
+- Prefer "Microsoft Entra ID" over "Azure AD".
+- My blog voice is direct - avoid "This blog post explores..." openings.
 - Don't mention Inforcer by name in Description or Private Description.
 ```
 
-**Bad uses (these will fight the built-in guardrails and produce broken output):**
-
+**Bad uses** (fight the guardrails, produce broken output):
 ```md
-- Fill Additional Technology Areas with "Microsoft 365" whenever nothing else fits.
-- Add a YAML frontmatter block with source_url and detected_on.
-- Make up a Number of Views based on how popular the topic sounds.
+- Fill Additional Technology Areas with "Microsoft 365" by default.
+- Add a YAML frontmatter block to every file.
 ```
 
-The prompt tells the model: *"if your custom instructions conflict with the built-in rules, the built-in rules win"*. That's a safety net, not a licence to be careless — write your custom instructions like additions, not overrides.
+Built-in rules always win in conflicts. Reset to comment-only to disable.
 
-Commit the file to `main` and the next run picks it up. Reset to a bare-comment file (the version shipped in the repo) to disable.
+### GitHub secret (optional, for wheremymvps.at)
 
-## Optional: pull attendance from Where My MVPs At?
+Only if you want conference-attendance sync:
 
-[Where My MVPs At?](https://wheremymvps.at/) exposes a PAT-authenticated `/api/v1/speakers` endpoint. Enable this and the workflow will look up your attendance records nightly and open PRs for any new conferences you're linked to.
+1. At [wheremymvps.at/api-console](https://wheremymvps.at/api-console) — regenerate PAT with `speakers:read` scope
+2. Repo → `Settings → Secrets and variables → Actions → New repository secret` → name `WHEREMYMVPSAT_PAT`, paste token
+3. In `config.yml`:
+   ```yaml
+   wheremymvpsat:
+     enabled: true
+     user_id: royklo   # your wheremymvps.at handle
+   ```
 
-### 1. Regenerate your PAT with the `speakers:read` scope
-
-Sign in at [wheremymvps.at/api-console](https://wheremymvps.at/api-console). Under **PAT Management**, tick the `speakers:read` scope (and `conferences:read` if not already selected), then click **Regenerate PAT**. Copy the new token — it's shown once.
-
-### 2. Store the PAT as a repo secret
-
-`Settings` → `Secrets and variables` → `Actions` → `New repository secret`:
-- **Name:** `WHEREMYMVPSAT_PAT`
-- **Value:** the token from step 1
-
-### 3. Enable in `config.yml`
-
-```yaml
-wheremymvpsat:
-  enabled: true
-  user_id: royklo   # your wheremymvps.at handle (case-sensitive, no @)
-```
-
-`user_id` must exactly match the `userId` field the API uses for your account — check by browsing to your own profile page on wheremymvps.at and looking at the URL slug. It cannot be auto-discovered because the `/api/v1/pat` endpoint doesn't include it.
-
-On each run the script will fetch every attendance record where `userId eq '<yours>'`, enrich each conferenceId with details from `/api/v1/conferences`, and pass one activity item per conference through the same pipeline as RSS items. The model chooses between `Speaker/Presenter at Microsoft Event` and `Speaker/Presenter at Third-party Event` based on the conference name; you correct it in the PR if needed.
+---
 
 ## How the PR review flow works
 
-Each run that finds new content opens a **fresh PR on its own branch**, so if you skip a night the older PRs still sit there waiting. Branches look like:
+Each run opens a **fresh PR on its own branch**:
 
 ```
 mvp-monitor/2026-07-04-183021-blog
@@ -149,65 +98,60 @@ mvp-monitor/2026-07-05-183017-blog-event
 mvp-monitor/2026-07-06-183024-podcast
 ```
 
-The suffix is a slug of the activity types the run detected (`blog`, `event`, `podcast`, `webinar`, `opensource`, `mentorship`, `usergroup`, `feedback`, `support`, `product-feedback`), so at a glance you know what's in the PR.
+- Branch suffix is the Activity Types found in that run (`blog`, `event`, `podcast`, `webinar`, `opensource`, ...)
+- Skipped nights don't overwrite older PRs — they queue up
+- `auto_merge: true` → merges when green; otherwise you review
 
-If `auto_merge: true`, each PR merges as soon as it's mergeable. If `auto_merge: false` (the default), review the draft first — see the next section.
+Merged files land in `activities/` as your permanent log. Everything already merged is tracked in `.state/seen.json`.
 
-Merged files stay in `activities/` as your permanent log. Everything already processed is tracked in `.state/seen.json` so the next run skips it.
+---
 
 ## Editing an activity before you merge
 
-Every draft is written by a language model, so before it goes into your MVP portal you almost always want to tweak the wording, fill in analytics numbers, or fix a wrong Technology Area pick. Two ways:
+Two ways.
 
-### Option A — edit in the GitHub web UI (fastest for small tweaks)
+**Web UI (fastest):**
+1. Open the PR
+2. Click the file → pencil icon → edit inline
+3. Commit directly to the `mvp-monitor/…` branch
+4. Merge
 
-1. Open the PR that the workflow created.
-2. Click the file in `activities/` that you want to change.
-3. Click the pencil icon in the top right of the file view.
-4. Edit the markdown directly - fix wording, replace `(fill from analytics before submitting)` with real numbers, correct a Technology Area, add or remove a Target Audience line, change the Activity Type if the model guessed wrong.
-5. **Commit directly to the PR branch** (choose "Commit directly to the `mvp-monitor/…` branch" — do not open a new PR).
-6. Merge when you're happy.
-
-### Option B — check out the branch locally (better for bigger edits or multiple files)
-
+**Local (better for bigger edits):**
 ```bash
-# grab the branch the workflow just pushed
 git fetch origin
 git checkout mvp-monitor/2026-07-04-183021-blog
-
-# edit as many files as you want
-code activities/2026-07-04-*.md
-
-# push the edits back to the PR
-git add activities/
-git commit -m "review: polish MVP activity drafts"
+# edit activities/*.md
+git commit -am "review: polish drafts"
 git push
 ```
 
-The PR updates in place. Merge when it's ready.
+**Before you merge — check:**
 
-### What to check before you merge
+- [ ] Description doesn't fabricate anything
+- [ ] `Number of Views` / views / attendees replaced with real numbers (or leave the placeholder as a to-do)
+- [ ] Primary + Additional Technology Area actually match the content
+- [ ] Activity Type matches the source (Blog vs Podcast vs Speaker…)
+- [ ] Target Audience covers every audience the content serves
 
-- **Description and Private Description** read naturally and don't fabricate anything the source doesn't say.
-- **Number of Views** (or Livestream views / On-demand views / Number of sessions / In-Person Attendees for non-blog types) is replaced with a real number if you have one, or left as the placeholder if you don't - the placeholder is a signal to yourself when you paste into the portal.
-- **Primary / Additional Technology Area** points to what the content actually covers - the model uses only what's in `references/technology-areas.md`, but it can still pick the wrong sibling within a category.
-- **Activity Type** matches the source (Blog vs. Podcast vs. Speaker/Presenter at …). Fix here if the auto-detect got it wrong; the type-specific fields section below it should match too.
-- **Target Audience** matches who the content is for. Remove or add audience lines as needed.
+Once merged, paste each `## Section` into its portal field.
 
-Once merged, copy each section of the file into the corresponding MVP portal form field and submit.
+---
 
 ## Adding a non-blog activity
 
-The template defaults to `Blog`, but the model picks a different Activity Type when the source clearly matches one (a podcast RSS feed, a YouTube feed, an event page, an open-source repo). After the PR opens you can also edit the generated file and change `## Activity Type` yourself before merging.
+The model picks a different Activity Type automatically when the source clearly matches — podcast RSS, YouTube feed, event page, open-source repo. If it guesses wrong, fix it in the PR before merging.
 
-Every Activity Type has slightly different follow-up fields. The template's **Type-specific fields** section lists them. Full reference:
+**Supported Activity Types** (verbatim from the portal):
 
-- **[references/activity-types.md](references/activity-types.md)** — every Activity Type and its per-type fields (Number of sessions, Livestream views, In-Person Attendees, Microsoft Event enum, etc.).
-- **[references/technology-areas.md](references/technology-areas.md)** — every Primary / Additional Technology Area value, grouped by portal category.
-
-Supported Activity Types (verbatim as they appear in the portal):
 `Blog`, `Podcast`, `Webinar/Online Training/Video/Livestream`, `Content Feedback and Editing`, `Online Support`, `Open Source/Project/Sample code/Tools`, `Product Feedback`, `Mentorship/Coaching`, `Speaker/Presenter at Microsoft Event`, `Speaker/Presenter at Third-party Event`, `User Group Owner`.
+
+**References** (used by the model and safe to browse):
+
+- [`references/activity-types.md`](references/activity-types.md) — per-type extra fields (Livestream views, In-Person Attendees, Microsoft Event enum, etc.)
+- [`references/technology-areas.md`](references/technology-areas.md) — full Primary/Additional Technology Area enum
+
+---
 
 ## License
 
-MIT. Do whatever you want with it. If you improve it, a PR is welcome but not required.
+MIT. Do whatever you want with it. PRs welcome, not required.
