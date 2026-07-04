@@ -7,7 +7,7 @@
 <one value from references/technology-areas.md>
 
 ## Additional Technology Areas
-<one value from references/technology-areas.md, or N/A>
+<one value from references/technology-areas.md, or "(no second area detected - please review)" if nothing else clearly fits>
 
 ## Title
 <exact title, max 100 characters>
