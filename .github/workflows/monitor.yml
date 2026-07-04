@@ -1,0 +1,55 @@
+name: MVP activity monitor
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 03:00 UTC nightly
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  models: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run monitor
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/monitor.py
+
+      - name: Read auto_merge flag
+        id: cfg
+        run: |
+          echo "auto_merge=$(python -c "import yaml; print(str(yaml.safe_load(open('config.yml')).get('auto_merge', False)).lower())")" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update pull request
+        id: pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: nightly MVP activity update"
+          title: "MVP activities: new content detected"
+          body: |
+            Automated MVP activity capture from the nightly monitor.
+
+            Review each generated file in `activities/`, fill in `Number of Views`
+            from your analytics, tweak wording if needed, and merge.
+          branch: mvp-monitor/nightly
+          delete-branch: true
+
+      - name: Enable auto-merge
+        if: steps.cfg.outputs.auto_merge == 'true' && steps.pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --squash "${{ steps.pr.outputs.pull-request-number }}"

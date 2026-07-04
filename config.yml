@@ -1,0 +1,34 @@
+# MVP activity monitor - edit this file to point the workflow at your content.
+# See README.md for the full field reference.
+
+# One entry per feed URL or page URL. Feeds are auto-detected; anything
+# that isn't a feed is fetched as a plain HTML page.
+sources:
+  - https://example.com/feed.xml
+  # - https://anchor.fm/your-podcast/rss
+  # - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
+  # - https://someevent.example.com/your-session
+
+# Only items whose title or summary contains at least one of these
+# (case-insensitive) become MVP activity entries. Leave empty to capture
+# every new item.
+keywords:
+  - intune
+  - entra
+  - microsoft graph
+  - microsoft 365
+
+# Defaults used when the model can't infer a value from the content.
+defaults:
+  primary_technology_area: Microsoft Intune
+  additional_technology_areas: Microsoft Graph
+  target_audience:
+    - IT Pro
+
+# When true, the nightly PR is auto-merged as soon as it's mergeable.
+# When false (default), you review every draft before it lands on main.
+auto_merge: false
+
+# Model used via GitHub Models. gpt-4o is a solid default; swap for any
+# model exposed at https://models.github.ai/inference.
+model: openai/gpt-4o
