@@ -2,20 +2,23 @@
 
 # Feeds are auto-detected; non-feed URLs are fetched as HTML pages.
 sources:
-  - https://rksolutions.nl/feed.xml
+  - https://your-blog.example.com/feed.xml
   # - https://anchor.fm/your-podcast/rss
   # - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
 
-# Include filter. Leave empty for sources you own.
-keywords:
- # - Roy Klooster
+# Include filter. Leave empty for sources you own; for community
+# aggregators list your name and handles so only your content passes.
+keywords: []
+  # - Your Name
+  # - your-handle
 
 # Exclude filter. Case-insensitive substring on title/summary/URL.
-exclude_keywords:
- - inforcer
+exclude_keywords: []
+  # - sponsored
+  # - your-employer-name
 
 # Only items published on or after this date (YYYY-MM-DD).
-start_date: 2026-06-25
+# start_date: 2026-01-01
 
 auto_merge: false
 # openai/gpt-5 rejects temperature=0 so keep 4.1 unless you patch the call.
@@ -26,4 +29,4 @@ model: openai/gpt-4.1
 # secret WHEREMYMVPSAT_PAT. Set user_id to your own wheremymvps.at handle.
 wheremymvpsat:
   enabled: false
-  user_id: royklo
+  # user_id: your-github-login
