@@ -1,11 +1,4 @@
-"""
-Nightly MVP activity monitor.
-
-Reads config.yml, fetches every configured source, filters by keyword,
-skips anything already in .state/seen.json, and for each new match asks
-GitHub Models to draft an MVP portal entry from the template. Generated
-files land in activities/. The workflow opens a PR with the result.
-"""
+"""Nightly MVP activity monitor. See README.md."""
 from __future__ import annotations
 
 import json
@@ -28,9 +21,7 @@ TEMPLATE_PATH = ROOT / "templates" / "activity_template.md"
 
 MODELS_ENDPOINT = "https://models.github.ai/inference/chat/completions"
 
-# Short, filesystem-safe branch-name slugs per Activity Type. Kept short
-# so a mixed-type run produces a readable branch like
-# "mvp-monitor/2026-07-04-183021-blog-event".
+# Branch-name suffix per Activity Type.
 ACTIVITY_TYPE_SLUGS = {
     "Blog": "blog",
     "Podcast": "podcast",
@@ -62,7 +53,6 @@ def save_state(seen: set[str]) -> None:
 
 
 def gather_items(sources: list[str]):
-    """Yield {url, title, summary, published, published_parsed} for every entry."""
     for source in sources:
         parsed = feedparser.parse(source)
         if parsed.entries:
@@ -75,7 +65,6 @@ def gather_items(sources: list[str]):
                     "published_parsed": entry.get("published_parsed"),
                 }
             continue
-        # Not a feed - treat as a single page.
         page = _fetch_page(source)
         if page is None:
             continue
@@ -130,9 +119,7 @@ def parse_start_date(value) -> "date | None":
 
 
 def is_after_start_date(item: dict, start_date: "date | None") -> bool:
-    """True if the item was published on/after start_date. Items with no
-    parseable date pass through so RSS feeds with weird metadata don't
-    silently drop everything."""
+    # No cutoff or no parseable date -> pass through.
     if start_date is None:
         return True
     st = item.get("published_parsed")
@@ -149,7 +136,6 @@ def matches_keywords(item: dict, keywords: list[str]) -> bool:
 
 
 def matches_exclude(item: dict, exclude_keywords: list[str]) -> bool:
-    """True if any exclude keyword is present. Case-insensitive substring."""
     if not exclude_keywords:
         return False
     hay = f"{item['title']} {item['summary']} {item['url']}".lower()
@@ -246,16 +232,14 @@ def main() -> int:
     seen = load_state()
 
     new_items = []
+    # start_date and exclude misses don't get marked seen, so loosening
+    # either config value later resurfaces the items on the next run.
     for item in gather_items(sources):
         if not item["url"] or item["url"] in seen:
             continue
         if not is_after_start_date(item, start_date):
-            # Don't record in seen - if start_date is later moved earlier,
-            # older items should become visible again.
             continue
         if matches_exclude(item, exclude_keywords):
-            # Don't record in seen - if an exclude term is later removed,
-            # previously-excluded items should come back through.
             continue
         if not matches_keywords(item, keywords):
             seen.add(item["url"])
@@ -295,7 +279,6 @@ def _extract_activity_type(md: str) -> str | None:
 
 
 def _emit_workflow_outputs(types_found: set[str]) -> None:
-    """Write branch-suffix and has_new to $GITHUB_OUTPUT for the workflow."""
     output_path = os.environ.get("GITHUB_OUTPUT")
     if not output_path:
         return
@@ -306,7 +289,6 @@ def _emit_workflow_outputs(types_found: set[str]) -> None:
 
 
 def _self_check() -> None:
-    """Runnable smoke test: python scripts/monitor.py --self-check"""
     assert slug_from_url("https://rksolutions.nl/posts/macos-laps/") == "posts-macos-laps"
     assert slug_from_url("https://example.com/") == "example-com"
     assert matches_keywords({"title": "Intune tip", "summary": "", "url": ""}, ["intune"]) is True
@@ -332,8 +314,8 @@ def _self_check() -> None:
     _st_old = _time.struct_time((2025, 1, 1, 12, 0, 0, 0, 0, 0))
     assert is_after_start_date({"published_parsed": _st}, date(2026, 1, 1)) is True
     assert is_after_start_date({"published_parsed": _st_old}, date(2026, 1, 1)) is False
-    assert is_after_start_date({"published_parsed": None}, date(2026, 1, 1)) is True  # no date -> pass
-    assert is_after_start_date({"published_parsed": _st_old}, None) is True  # no cutoff -> pass
+    assert is_after_start_date({"published_parsed": None}, date(2026, 1, 1)) is True
+    assert is_after_start_date({"published_parsed": _st_old}, None) is True
     assert matches_exclude({"title": "About Inforcer", "summary": "", "url": ""}, ["inforcer"]) is True
     assert matches_exclude({"title": "Something else", "summary": "", "url": ""}, ["inforcer"]) is False
     assert matches_exclude({"title": "x", "summary": "", "url": ""}, []) is False

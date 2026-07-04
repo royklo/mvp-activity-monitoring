@@ -1,45 +1,21 @@
-# MVP activity monitor - edit this file to point the workflow at your content.
-# See README.md for the full field reference.
+# MVP activity monitor config. See README.md for details.
 
-# One entry per feed URL or page URL. Feeds are auto-detected; anything
-# that isn't a feed is fetched as a plain HTML page.
+# Feeds are auto-detected; non-feed URLs are fetched as HTML pages.
 sources:
   - https://rksolutions.nl/feed.xml
   # - https://anchor.fm/your-podcast/rss
   # - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
-  # - https://someevent.example.com/your-session
 
-# Keywords the workflow filters on. For sources you author yourself
-# (your own blog feed, your own YouTube feed), leave this empty to
-# capture everything you publish.
-#
-# For sources you do NOT own (a community aggregator, an event site,
-# a co-host's podcast feed), put your own name and any handles that
-# uniquely identify your content, so only items about you or by you
-# become activity entries.
+# Include filter. Leave empty for sources you own.
 keywords:
  # - Roy Klooster
 
-# Items whose title, summary or URL contains any of these (case-
-# insensitive) are dropped BEFORE the include-keyword check. Use this
-# for posts that don't count towards MVP activity - e.g. product
-# announcements or sponsored content from your day job. Excluded items
-# are NOT written to seen.json, so if you remove a term later, the old
-# posts will flow through again.
+# Exclude filter. Case-insensitive substring on title/summary/URL.
 exclude_keywords:
  - inforcer
 
-# Only consider items published on or after this date (YYYY-MM-DD).
-# Useful when you first onboard the workflow and don't want the entire
-# backlog of your blog to open as one huge PR. Items without a
-# parseable publish date always pass this check. Not written to seen,
-# so moving the date earlier later will surface older items again.
+# Only items published on or after this date (YYYY-MM-DD).
 start_date: 2026-06-25
 
-# When true, the nightly PR is auto-merged as soon as it's mergeable.
-# When false (default), you review every draft before it lands on main.
 auto_merge: false
-
-# Model used via GitHub Models. gpt-4o is a solid default; swap for any
-# model exposed at https://models.github.ai/inference.
 model: openai/gpt-4o
