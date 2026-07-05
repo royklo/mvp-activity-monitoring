@@ -140,4 +140,4 @@ Your config, secrets, and merged activities are safe. The template only ever cha
 | Run succeeded, no PR | `has_new=false`. Check the run log — nothing new, all filtered, or all in `seen.json`. |
 | `(no second area detected)` or `(uncertain - please review)` in the file | Design, not a bug. The model deliberately flagged that field for you to decide. |
 | Model call HTTP 400 | `model:` value doesn't accept `temperature: 0`. Switch to `openai/gpt-4.1` or strip the temperature param in `call_github_models`. |
-| wheremymvps.at returns zero rows | Wrong `user_id`, missing `speakers:read` scope, or you haven't linked any events on your wheremymvps.at profile yet. |
+| wheremymvps.at returns zero rows | `user_id` value is case-sensitive and drops the leading `@` (profile `@Jane-Doe` → `user_id: "Jane-Doe"`), missing `speakers:read` scope on the PAT, or the account has no linked events yet. |

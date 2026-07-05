@@ -4,14 +4,21 @@
 sources:
   - url: https://your-blog.example.com/feed.xml
     keywords:
-      # - Intune
-      # - Microsoft Graph
     exclude_keywords:
       # - sponsored content
+      # - product marketing for <your employer>
+  - url: https://third-party-website.example.com/feed.xml
+    keywords:
+      # - "<your name>"       # replace placeholder with your real name before uncommenting
+    exclude_keywords:
+      # - sponsored content
+      # - product marketing for <your employer>
 
 # Global fallbacks - used only for bare-URL sources above.
 keywords:
 exclude_keywords:
+  # - "<your employer>"      # replace placeholder with your real employer before uncommenting
+  - sponsored content
 
 # start_date: 2026-01-01
 auto_merge: false
@@ -19,4 +26,7 @@ model: openai/gpt-4.1
 
 wheremymvpsat:
   enabled: false
-  # user_id: your-github-login
+  # user_id must match the handle EXACTLY as stored on wheremymvps.at -
+  # case-sensitive, no leading '@'. E.g. profile shown as "@Lewis-Barry"
+  # is stored as "Lewis-Barry"; "lewis-barry" will return zero rows.
+  # user_id: "Your-GitHub-Login"
