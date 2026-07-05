@@ -470,10 +470,16 @@ def main() -> int:
             continue
         if not is_after_start_date(item, start_date):
             continue
-        # Per-source overrides fall back to the global lists when absent.
+        # Per-source overrides fall back to the global lists when either
+        # missing OR present-but-null (e.g. "exclude_keywords:" with only
+        # commented items underneath - a very common config shape).
+        # An explicit empty list [] is respected as "no filter for this
+        # source", overriding the global.
         src_cfg = item.get("_source_cfg") or {}
-        effective_exclude = src_cfg.get("exclude_keywords", exclude_keywords)
-        effective_keywords = src_cfg.get("keywords", keywords)
+        _src_ex = src_cfg.get("exclude_keywords")
+        _src_kw = src_cfg.get("keywords")
+        effective_exclude = _src_ex if _src_ex is not None else exclude_keywords
+        effective_keywords = _src_kw if _src_kw is not None else keywords
         if matches_exclude(item, effective_exclude):
             continue
         # wheremymvps.at rows already scope to this MVP via PAT+userId,
@@ -579,8 +585,10 @@ def _self_check() -> None:
     # Integration: per-source overrides beat global; wmma bypasses include filter.
     def _apply(item, global_keywords, global_exclude):
         src = item.get("_source_cfg") or {}
-        eff_ex = src.get("exclude_keywords", global_exclude)
-        eff_kw = src.get("keywords", global_keywords)
+        _ex = src.get("exclude_keywords")
+        _kw = src.get("keywords")
+        eff_ex = _ex if _ex is not None else global_exclude
+        eff_kw = _kw if _kw is not None else global_keywords
         if matches_exclude(item, eff_ex):
             return "excluded"
         if item.get("source") != "wheremymvpsat" and not matches_keywords(item, eff_kw):
@@ -597,6 +605,12 @@ def _self_check() -> None:
     assert _apply(_bare_global, ["post"], []) == "pass"            # bare falls back to global
     assert _apply(_bare_global, ["missing"], []) == "keyword-drop" # global mismatch drops
     assert _apply(_wmma, ["irrelevant"], []) == "pass"             # wmma bypasses include filter
+    # Regression: null per-source keys (from commented-only YAML) fall
+    # back to global; explicit [] per-source overrides to no-filter.
+    _null_src = {"title": "Post about Inforcer", "summary": "", "url": "https://x", "_source_cfg": {"keywords": None, "exclude_keywords": None}}
+    _empty_src = {"title": "Post about Inforcer", "summary": "", "url": "https://x", "_source_cfg": {"keywords": [], "exclude_keywords": []}}
+    assert _apply(_null_src, [], ["inforcer"]) == "excluded"       # null -> global exclude applies
+    assert _apply(_empty_src, [], ["inforcer"]) == "pass"          # [] -> global exclude ignored
     # Shipped config must be valid YAML - guards against the "keywords: []
     # followed by commented example items" pattern that breaks the moment
     # a user un-comments a real item.
