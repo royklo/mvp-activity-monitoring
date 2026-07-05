@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import string
 import sys
 from datetime import date
 from itertools import chain
@@ -24,6 +25,8 @@ TEMPLATE_PATH = ROOT / "templates" / "activity_template.md"
 TECH_AREAS_PATH = ROOT / "references" / "technology-areas.md"
 ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
 CUSTOM_INSTRUCTIONS_PATH = ROOT / "custom-instructions.md"
+PROMPTS_DIR = ROOT / "prompts"
+DRAFTER_DIR = PROMPTS_DIR / "drafter"
 
 MODELS_ENDPOINT = "https://models.github.ai/inference/chat/completions"
 MAX_BODY_CHARS = 6000  # cap so a huge post doesn't blow the prompt
@@ -183,26 +186,14 @@ def build_filter_prompt(item: dict, keywords: list[str], exclude_keywords: list[
     inc = "\n".join(f"- {k}" for k in keywords) if keywords else "(no include filter - accept anything on-topic for an MVP)"
     exc = "\n".join(f"- {k}" for k in exclude_keywords) if exclude_keywords else "(nothing to exclude)"
     tags = ", ".join(item.get("tags") or []) or "(none)"
-    return f"""Decide whether the content below should become a Microsoft MVP program activity entry.
-
-Content:
-- Title: {item['title']}
-- Tags (author-provided): {tags}
-- Body excerpt: {item['summary']}
-
-Topics the MVP tracks (INCLUDE if primarily about any of these):
-{inc}
-
-Topics the MVP wants to skip (EXCLUDE only if the content is SUBSTANTIVELY about any of these; a passing mention in an intro, bio, or aside does NOT count):
-{exc}
-
-Rules:
-- Match on topic, not literal string presence. "Post about Intune with an intro mentioning Inforcer" is INCLUDE, not EXCLUDE.
-- Include filter (if set) means the content's PRIMARY topic must be in that list. Peripheral mention is not enough.
-- Exclude filter overrides include when the primary topic actually is one of the excluded ones.
-- No include filter means accept anything the MVP might reasonably log.
-
-Answer with a single word on its own line: `include` or `exclude`."""
+    tpl = string.Template((PROMPTS_DIR / "filter.md").read_text())
+    return tpl.safe_substitute(
+        title=item["title"],
+        tags=tags,
+        body=item["summary"],
+        include_topics=inc,
+        exclude_topics=exc,
+    )
 
 
 def classify_item(item: dict, keywords: list[str], exclude_keywords: list[str], token: str, model: str) -> bool:
@@ -252,128 +243,36 @@ def call_github_models(prompt: str, token: str, model: str) -> str:
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
+def _load_drafter_template() -> string.Template:
+    parts = [p.read_text() for p in sorted(DRAFTER_DIR.glob("[0-9]*.md"))]
+    return string.Template("".join(parts))
+
+
 def build_prompt(item: dict, template: str) -> str:
     tech_areas = TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
     activity_types = ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
     custom = load_custom_instructions()
-    custom_block = (
-        "\n# Custom instructions (user-provided)\n"
-        "The MVP has added the following preferences. Apply them where they make\n"
-        "sense, but if any item here conflicts with the Non-negotiables or\n"
-        "Per-field rules above, the built-in rules win.\n\n"
-        + custom
-        + "\n"
-    ) if custom else ""
-    source_note = ""
+    if custom:
+        wrapper = string.Template((PROMPTS_DIR / "custom_instructions_wrapper.md").read_text())
+        custom_block = wrapper.safe_substitute(custom_instructions=custom)
+    else:
+        custom_block = ""
     if item.get("source") == "wheremymvpsat":
-        source_note = (
-            "\nSource: wheremymvps.at attendance record. The Summary field is a "
-            "JSON object with 'speaker' (userId, userName, status) and 'conference' "
-            "(name, location, country, startDate, endDate, description, topics, "
-            "website). Choose Activity Type = 'Speaker/Presenter at Microsoft Event' "
-            "if the conference name matches a known Microsoft event (Build, Ignite, "
-            "Inspire, MVP Summit, RD Summit, MLSA Summit); otherwise "
-            "'Speaker/Presenter at Third-party Event'. Use conference.startDate for "
-            "Published Date. Use conference.website for Activity URL if present."
-        )
-    return f"""# Role
-You are drafting a single Microsoft MVP program activity entry from one piece of online content the MVP created or participated in. A Microsoft program reviewer will read the output straight from your response. Write for that reviewer, not for the MVP or a peer engineer.
-
-# Non-negotiables
-1. Return ONLY the filled-in markdown from the template. No preamble, no code fence, no YAML frontmatter (`---`). Start with `# MVP Activity: ...`.
-2. Preserve every heading in the template exactly. Never rename, drop, or reorder them.
-3. Never invent facts. Every date, number, statistic, quote, product name, or claim must come from the Source item below. If a required field cannot be derived, write the exact placeholder given for that field - not a guess.
-4. Use plain hyphens (`-`), never em-dashes (`—`).
-5. Enum fields (Activity Type, Technology Area, Target Audience, Role, Microsoft Event, etc.) must be copied verbatim from the reference blocks at the bottom of this prompt. Case, punctuation, and slashes must match exactly.
-
-# How to work through this
-Follow these steps in order. Do not skip.
-
-Step 1. Read Title, Tags, Body, and Published from the Source item.
-Step 2. Decide Activity Type (see rules below). Note the type-specific fields it requires.
-Step 3. Anchor on the Tags line - it is the AUTHOR'S OWN CLASSIFICATION of the content. Use it as the primary signal for Technology Area choices. The body is context; the tags are ground truth for what the content is about.
-Step 4. Pick Primary Technology Area, then decide whether an Additional Technology Area is warranted (see the strict rule below).
-Report each Technology Area verbatim from the Technology Areas reference. The reference is grouped for browsing; only the leaf values are legal outputs.
-Step 5. Fill in the descriptive fields (Title, Description, Private Description) using only material from the Source item.
-Step 6. List every Target Audience the content serves.
-Step 7. Fill Published Date, Role, Quantity, Activity URL, and the Type-specific fields block for the chosen Activity Type.
-
-# Per-field rules
-
-## Activity Type
-Default `Blog`. Choose a different value ONLY when the source clearly matches one:
-- Podcast RSS or audio feed -> `Podcast`
-- YouTube/Vimeo/livestream feed -> `Webinar/Online Training/Video/Livestream`
-- Conference session page, event listing, meetup -> `Speaker/Presenter at Microsoft Event` if the conference is a known Microsoft event (Build, Ignite, Inspire, MVP Summit, RD Summit, MLSA Summit); otherwise `Speaker/Presenter at Third-party Event`
-- Public repo or code sample project -> `Open Source/Project/Sample code/Tools`
-- Community forum post, StackOverflow answer, Discord/Slack support thread -> `Online Support`
-- 1-on-1 or small-group teaching/coaching -> `Mentorship/Coaching`
-- Running or leading a user group -> `User Group Owner`
-- Editing/reviewing content -> `Content Feedback and Editing`
-- Product feedback to Microsoft -> `Product Feedback`
-
-## Primary Technology Area
-Pick exactly one value verbatim from the Technology Areas reference. Choose the SINGLE product the content is most centrally about. If nothing in the reference plausibly fits, write literally `(uncertain - please review)` - do not force a value.
-
-## Additional Technology Areas
-Only fill this when the content SUBSTANTIVELY covers a second Microsoft product. Substantive means multiple paragraphs, code samples, or configuration examples explicitly about that product. All three of the following DO NOT COUNT:
-- A single passing mention in an intro or scenario ("A user opens Teams and...", "you might also use SharePoint...").
-- A product name in an analogy or comparison ("similar to Outlook rules").
-- A product name that only appears in a stack trace, screenshot title, or file path.
-
-If the Tags line does not include the product AND the body does not substantively cover it, write literally `(no second area detected - please review)`. Do not force a value. The reviewer will decide whether to add one manually.
-
-## Title
-Max 100 characters. Prefer the source's own title; shorten only if it exceeds the limit.
-
-## Description
-Two short paragraphs, 1000 characters combined maximum, in program-reviewer voice (third person, no "you"). Paragraph 1: what the content covers - the concrete subject, key steps, tools, commands, or conclusions. Paragraph 2: impact - who it helps and what problem it saves them. No filler adjectives ("comprehensive", "in-depth", "cutting-edge"). No promotional language.
-
-## Private Description
-Max 1000 characters, MVP-only context: the trigger for creating the content, the documentation gap it fills, a customer/community pattern it addresses. Never include confidential customer names. If nothing meaningful to add beyond the public description, write one honest sentence to that effect.
-
-## Target Audience
-List EVERY audience the content genuinely serves, one per line as `- <value>`. Do not stop at one. Selection rules:
-- `IT Pro`: hands-on ops/admin walkthrough, troubleshooting, configuration
-- `Developer`: contains code, API/SDK usage, scripting, automation targeted at builders
-- `Technical Decision Maker`: covers governance, compliance, architecture patterns, security posture, policy trade-offs
-- `Business Decision Maker`: covers strategy, ROI, licensing, org-level decisions
-- `Student`: beginner tutorial or foundational explainer
-- `Other`: none of the above fit
-Most technical MVP-blog posts serve at least two of these. A post that walks an admin through fixing a compliance issue and explains the underlying policy design serves `IT Pro` AND `Technical Decision Maker`.
-
-## Published Date
-Copy the source's published date verbatim. If the source has no parseable date, write `(unknown)`.
-
-## Role
-Default `Author`. Use `Contributor` only if the MVP was not the primary creator. For Mentorship/Coaching pick from `Organizer | Mentor | Other`. For User Group Owner pick from `Organizer | Other`.
-
-## Quantity
-Always `1`.
-
-## Activity URL
-Use the URL from the Source item verbatim.
-
-## Type-specific fields
-Emit ONLY the sub-fields for the Activity Type you picked. Omit the entire section if the type has no extras. Numeric fields you cannot derive from the source get the literal placeholder `(fill from analytics before submitting)`.
-{custom_block}
-# Source item
-{source_note}
-- URL: {item['url']}
-- Title: {item['title']}
-- Tags (from the feed, AUTHORITATIVE for topic classification): {', '.join(item.get('tags') or []) or '(none)'}
-- Body: {item['summary']}
-- Published (raw): {item['published']}
-
-===== Activity Types reference =====
-{activity_types}
-
-===== Technology Areas reference =====
-{tech_areas}
-
-===== Template to fill =====
-{template}
-"""
+        source_note = (PROMPTS_DIR / "wmma_source_note.md").read_text()
+    else:
+        source_note = ""
+    return _load_drafter_template().safe_substitute(
+        custom_block=custom_block,
+        source_note=source_note,
+        url=item["url"],
+        title=item["title"],
+        tags=", ".join(item.get("tags") or []) or "(none)",
+        body=item["summary"],
+        published=item["published"],
+        activity_types=activity_types,
+        tech_areas=tech_areas,
+        template=template,
+    )
 
 
 def _extract_activity_type(md: str) -> str | None:
