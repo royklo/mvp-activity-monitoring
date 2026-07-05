@@ -45,36 +45,29 @@ Quick summary of the three things you'll actually edit:
 Filters can be global (apply to every source) or **per-source** (override on a specific feed). Bare URL strings inherit global filters; dict-shape sources can carry their own `keywords` / `exclude_keywords`:
 
 ```yaml
-# MVP activity monitor config. See README.md for details.
-
-# keywords / exclude_keywords are semantic topic hints (not substrings).
 sources:
+  # Your own feed: empty filters accept everything you publish
   - url: https://your-blog.example.com/feed.xml
     keywords:
     exclude_keywords:
-      # - sponsored content
-      # - product marketing for <your employer>
+
+  # Third-party feed you're published on: filter by yourself
   - url: https://third-party-website.example.com/feed.xml
     keywords:
-      - <your name>
+      # - "<your name>"     # replace placeholder before uncommenting
     exclude_keywords:
-      # - sponsored content
-      # - product marketing for <your employer>
 
 # Global fallbacks - used only for bare-URL sources above.
 keywords:
 exclude_keywords:
-  - <your employer>
-  - sponsored
+  # - "<your employer>"     # replace placeholder before uncommenting
+  - sponsored content
 
-# start_date: 2026-01-01
+start_date: 2026-01-01   # optional: skip your back-catalogue
 auto_merge: false
-model: openai/gpt-4.1
-
-wheremymvpsat:
-  enabled: false
-  # user_id: your-github-login
 ```
+
+For the full config (including `model:` and `wheremymvpsat:`), see [`config.yml`](config.yml) shipped in the template.
 
 | Field | What it does |
 |---|---|

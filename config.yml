@@ -9,7 +9,7 @@ sources:
       # - product marketing for <your employer>
   - url: https://third-party-website.example.com/feed.xml
     keywords:
-      - <your name>
+      # - "<your name>"       # replace placeholder with your real name before uncommenting
     exclude_keywords:
       # - sponsored content
       # - product marketing for <your employer>
@@ -17,8 +17,8 @@ sources:
 # Global fallbacks - used only for bare-URL sources above.
 keywords:
 exclude_keywords:
-  - <your employer>
-  - sponsored
+  # - "<your employer>"      # replace placeholder with your real employer before uncommenting
+  - sponsored content
 
 # start_date: 2026-01-01
 auto_merge: false
