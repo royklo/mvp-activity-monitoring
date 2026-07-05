@@ -18,9 +18,16 @@ sources:
 # Only apply to sources listed above as a BARE URL STRING (shorthand form,
 # no `url:` key, no per-source keywords/exclude_keywords). Sources defined
 # with the dict form ignore these completely and use their own lists.
-# Leave both empty if every source above already declares its own filters.
-keywords:
-exclude_keywords:
+# Same shape as the per-source lists: `[]` = no filter, or add items with
+# `- "value"` on indented lines below.
+keywords: []
+  # e.g.
+  # - "<your name>"
+  # - "<your-github-login>"
+exclude_keywords: []
+  # e.g.
+  # - "sponsored"
+  # - "<your-employer>"
 
 # start_date: 2026-01-01
 auto_merge: false
