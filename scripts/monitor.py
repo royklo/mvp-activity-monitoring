@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import string
 import sys
-import time
 from datetime import date
 from itertools import chain
 from pathlib import Path
@@ -15,6 +15,8 @@ import feedparser
 import httpx
 import yaml
 
+from wheremymvpsat import gather_wheremymvpsat
+
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.yml"
 STATE_PATH = ROOT / ".state" / "seen.json"
@@ -23,6 +25,8 @@ TEMPLATE_PATH = ROOT / "templates" / "activity_template.md"
 TECH_AREAS_PATH = ROOT / "references" / "technology-areas.md"
 ACTIVITY_TYPES_PATH = ROOT / "references" / "activity-types.md"
 CUSTOM_INSTRUCTIONS_PATH = ROOT / "custom-instructions.md"
+PROMPTS_DIR = ROOT / "prompts"
+DRAFTER_DIR = PROMPTS_DIR / "drafter"
 
 MODELS_ENDPOINT = "https://models.github.ai/inference/chat/completions"
 MAX_BODY_CHARS = 6000  # cap so a huge post doesn't blow the prompt
@@ -105,68 +109,6 @@ def gather_items(sources):
         }
 
 
-def gather_wheremymvpsat(config: dict):
-    wmma = config.get("wheremymvpsat") or {}
-    if not wmma.get("enabled"):
-        print("wheremymvpsat: disabled (config: enabled=false)")
-        return
-    user_id = wmma.get("user_id")
-    if not user_id:
-        print("! wheremymvpsat.enabled=true but user_id is unset - skipping", file=sys.stderr)
-        return
-    pat = os.environ.get("WHEREMYMVPSAT_PAT")
-    if not pat:
-        print("! wheremymvpsat.enabled=true but WHEREMYMVPSAT_PAT secret is missing - skipping", file=sys.stderr)
-        return
-    base = wmma.get("base_url", "https://wheremymvps.at/api/v1").rstrip("/")
-    headers = {"Authorization": f"Bearer {pat}", "Accept": "application/json"}
-    print(f"wheremymvpsat: enabled, user_id={user_id}")
-
-    try:
-        r = httpx.get(f"{base}/speakers", params={"$filter": f"userId eq '{user_id}'"}, headers=headers, timeout=30)
-        r.raise_for_status()
-        rows = r.json().get("value", [])
-    except httpx.HTTPError as exc:
-        print(f"! wheremymvpsat /speakers failed: {exc}", file=sys.stderr)
-        return
-    print(f"wheremymvpsat: /speakers filter=userId eq '{user_id}' -> {len(rows)} records")
-    if not rows:
-        print(
-            f"wheremymvpsat: 0 records for userId '{user_id}'. Note the value is "
-            "case-sensitive and must NOT include the leading '@' (profile shown as "
-            "'@Jane-Doe' is stored as 'Jane-Doe'). If the id is already correct, "
-            "add events on your wheremymvps.at profile first."
-        )
-        return
-
-    conf_ids = sorted({row["conferenceId"] for row in rows if row.get("conferenceId")})
-    conferences: dict[str, dict] = {}
-    if conf_ids:
-        try:
-            or_clause = " or ".join(f"id eq '{cid}'" for cid in conf_ids)
-            r = httpx.get(f"{base}/conferences", params={"$filter": or_clause}, headers=headers, timeout=30)
-            r.raise_for_status()
-            for c in r.json().get("value", []):
-                if isinstance(c, dict) and c.get("id"):
-                    conferences[c["id"]] = c
-            print(f"wheremymvpsat: /conferences enriched {len(conferences)}/{len(conf_ids)} records")
-        except httpx.HTTPError as exc:
-            print(f"! wheremymvpsat /conferences failed: {exc}", file=sys.stderr)
-
-    for row in rows:
-        conf = conferences.get(row.get("conferenceId", ""), {})
-        merged = {"speaker": row, "conference": conf}
-        stable = conf.get("website") or f"wmma://conference/{row.get('conferenceId')}/user/{user_id}"
-        yield {
-            "url": stable,
-            "title": conf.get("name") or f"Conference {row.get('conferenceId', '?')}",
-            "summary": json.dumps(merged, default=str, ensure_ascii=False)[:2000],
-            "published": conf.get("startDate", ""),
-            "published_parsed": _parse_iso_struct(conf.get("startDate")),
-            "source": "wheremymvpsat",
-        }
-
-
 def _pick_body(entry) -> str:
     # Prefer entry.content[0].value (full body) over entry.summary (excerpt).
     content = entry.get("content") or []
@@ -207,16 +149,6 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text or "").strip()
 
 
-def _parse_iso_struct(iso_date: str | None):
-    if not iso_date:
-        return None
-    try:
-        d = date.fromisoformat(iso_date[:10])
-    except ValueError:
-        return None
-    return time.struct_time((d.year, d.month, d.day, 0, 0, 0, 0, 0, 0))
-
-
 def _struct_time_to_date(st) -> date | None:
     if st is None:
         return None
@@ -254,26 +186,14 @@ def build_filter_prompt(item: dict, keywords: list[str], exclude_keywords: list[
     inc = "\n".join(f"- {k}" for k in keywords) if keywords else "(no include filter - accept anything on-topic for an MVP)"
     exc = "\n".join(f"- {k}" for k in exclude_keywords) if exclude_keywords else "(nothing to exclude)"
     tags = ", ".join(item.get("tags") or []) or "(none)"
-    return f"""Decide whether the content below should become a Microsoft MVP program activity entry.
-
-Content:
-- Title: {item['title']}
-- Tags (author-provided): {tags}
-- Body excerpt: {item['summary']}
-
-Topics the MVP tracks (INCLUDE if primarily about any of these):
-{inc}
-
-Topics the MVP wants to skip (EXCLUDE only if the content is SUBSTANTIVELY about any of these; a passing mention in an intro, bio, or aside does NOT count):
-{exc}
-
-Rules:
-- Match on topic, not literal string presence. "Post about Intune with an intro mentioning Inforcer" is INCLUDE, not EXCLUDE.
-- Include filter (if set) means the content's PRIMARY topic must be in that list. Peripheral mention is not enough.
-- Exclude filter overrides include when the primary topic actually is one of the excluded ones.
-- No include filter means accept anything the MVP might reasonably log.
-
-Answer with a single word on its own line: `include` or `exclude`."""
+    tpl = string.Template((PROMPTS_DIR / "filter.md").read_text())
+    return tpl.safe_substitute(
+        title=item["title"],
+        tags=tags,
+        body=item["summary"],
+        include_topics=inc,
+        exclude_topics=exc,
+    )
 
 
 def classify_item(item: dict, keywords: list[str], exclude_keywords: list[str], token: str, model: str) -> bool:
@@ -323,128 +243,36 @@ def call_github_models(prompt: str, token: str, model: str) -> str:
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
+def _load_drafter_template() -> string.Template:
+    parts = [p.read_text() for p in sorted(DRAFTER_DIR.glob("[0-9]*.md"))]
+    return string.Template("".join(parts))
+
+
 def build_prompt(item: dict, template: str) -> str:
     tech_areas = TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
     activity_types = ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
     custom = load_custom_instructions()
-    custom_block = (
-        "\n# Custom instructions (user-provided)\n"
-        "The MVP has added the following preferences. Apply them where they make\n"
-        "sense, but if any item here conflicts with the Non-negotiables or\n"
-        "Per-field rules above, the built-in rules win.\n\n"
-        + custom
-        + "\n"
-    ) if custom else ""
-    source_note = ""
+    if custom:
+        wrapper = string.Template((PROMPTS_DIR / "custom_instructions_wrapper.md").read_text())
+        custom_block = wrapper.safe_substitute(custom_instructions=custom)
+    else:
+        custom_block = ""
     if item.get("source") == "wheremymvpsat":
-        source_note = (
-            "\nSource: wheremymvps.at attendance record. The Summary field is a "
-            "JSON object with 'speaker' (userId, userName, status) and 'conference' "
-            "(name, location, country, startDate, endDate, description, topics, "
-            "website). Choose Activity Type = 'Speaker/Presenter at Microsoft Event' "
-            "if the conference name matches a known Microsoft event (Build, Ignite, "
-            "Inspire, MVP Summit, RD Summit, MLSA Summit); otherwise "
-            "'Speaker/Presenter at Third-party Event'. Use conference.startDate for "
-            "Published Date. Use conference.website for Activity URL if present."
-        )
-    return f"""# Role
-You are drafting a single Microsoft MVP program activity entry from one piece of online content the MVP created or participated in. A Microsoft program reviewer will read the output straight from your response. Write for that reviewer, not for the MVP or a peer engineer.
-
-# Non-negotiables
-1. Return ONLY the filled-in markdown from the template. No preamble, no code fence, no YAML frontmatter (`---`). Start with `# MVP Activity: ...`.
-2. Preserve every heading in the template exactly. Never rename, drop, or reorder them.
-3. Never invent facts. Every date, number, statistic, quote, product name, or claim must come from the Source item below. If a required field cannot be derived, write the exact placeholder given for that field - not a guess.
-4. Use plain hyphens (`-`), never em-dashes (`—`).
-5. Enum fields (Activity Type, Technology Area, Target Audience, Role, Microsoft Event, etc.) must be copied verbatim from the reference blocks at the bottom of this prompt. Case, punctuation, and slashes must match exactly.
-
-# How to work through this
-Follow these steps in order. Do not skip.
-
-Step 1. Read Title, Tags, Body, and Published from the Source item.
-Step 2. Decide Activity Type (see rules below). Note the type-specific fields it requires.
-Step 3. Anchor on the Tags line - it is the AUTHOR'S OWN CLASSIFICATION of the content. Use it as the primary signal for Technology Area choices. The body is context; the tags are ground truth for what the content is about.
-Step 4. Pick Primary Technology Area, then decide whether an Additional Technology Area is warranted (see the strict rule below).
-Report each Technology Area verbatim from the Technology Areas reference. The reference is grouped for browsing; only the leaf values are legal outputs.
-Step 5. Fill in the descriptive fields (Title, Description, Private Description) using only material from the Source item.
-Step 6. List every Target Audience the content serves.
-Step 7. Fill Published Date, Role, Quantity, Activity URL, and the Type-specific fields block for the chosen Activity Type.
-
-# Per-field rules
-
-## Activity Type
-Default `Blog`. Choose a different value ONLY when the source clearly matches one:
-- Podcast RSS or audio feed -> `Podcast`
-- YouTube/Vimeo/livestream feed -> `Webinar/Online Training/Video/Livestream`
-- Conference session page, event listing, meetup -> `Speaker/Presenter at Microsoft Event` if the conference is a known Microsoft event (Build, Ignite, Inspire, MVP Summit, RD Summit, MLSA Summit); otherwise `Speaker/Presenter at Third-party Event`
-- Public repo or code sample project -> `Open Source/Project/Sample code/Tools`
-- Community forum post, StackOverflow answer, Discord/Slack support thread -> `Online Support`
-- 1-on-1 or small-group teaching/coaching -> `Mentorship/Coaching`
-- Running or leading a user group -> `User Group Owner`
-- Editing/reviewing content -> `Content Feedback and Editing`
-- Product feedback to Microsoft -> `Product Feedback`
-
-## Primary Technology Area
-Pick exactly one value verbatim from the Technology Areas reference. Choose the SINGLE product the content is most centrally about. If nothing in the reference plausibly fits, write literally `(uncertain - please review)` - do not force a value.
-
-## Additional Technology Areas
-Only fill this when the content SUBSTANTIVELY covers a second Microsoft product. Substantive means multiple paragraphs, code samples, or configuration examples explicitly about that product. All three of the following DO NOT COUNT:
-- A single passing mention in an intro or scenario ("A user opens Teams and...", "you might also use SharePoint...").
-- A product name in an analogy or comparison ("similar to Outlook rules").
-- A product name that only appears in a stack trace, screenshot title, or file path.
-
-If the Tags line does not include the product AND the body does not substantively cover it, write literally `(no second area detected - please review)`. Do not force a value. The reviewer will decide whether to add one manually.
-
-## Title
-Max 100 characters. Prefer the source's own title; shorten only if it exceeds the limit.
-
-## Description
-Two short paragraphs, 1000 characters combined maximum, in program-reviewer voice (third person, no "you"). Paragraph 1: what the content covers - the concrete subject, key steps, tools, commands, or conclusions. Paragraph 2: impact - who it helps and what problem it saves them. No filler adjectives ("comprehensive", "in-depth", "cutting-edge"). No promotional language.
-
-## Private Description
-Max 1000 characters, MVP-only context: the trigger for creating the content, the documentation gap it fills, a customer/community pattern it addresses. Never include confidential customer names. If nothing meaningful to add beyond the public description, write one honest sentence to that effect.
-
-## Target Audience
-List EVERY audience the content genuinely serves, one per line as `- <value>`. Do not stop at one. Selection rules:
-- `IT Pro`: hands-on ops/admin walkthrough, troubleshooting, configuration
-- `Developer`: contains code, API/SDK usage, scripting, automation targeted at builders
-- `Technical Decision Maker`: covers governance, compliance, architecture patterns, security posture, policy trade-offs
-- `Business Decision Maker`: covers strategy, ROI, licensing, org-level decisions
-- `Student`: beginner tutorial or foundational explainer
-- `Other`: none of the above fit
-Most technical MVP-blog posts serve at least two of these. A post that walks an admin through fixing a compliance issue and explains the underlying policy design serves `IT Pro` AND `Technical Decision Maker`.
-
-## Published Date
-Copy the source's published date verbatim. If the source has no parseable date, write `(unknown)`.
-
-## Role
-Default `Author`. Use `Contributor` only if the MVP was not the primary creator. For Mentorship/Coaching pick from `Organizer | Mentor | Other`. For User Group Owner pick from `Organizer | Other`.
-
-## Quantity
-Always `1`.
-
-## Activity URL
-Use the URL from the Source item verbatim.
-
-## Type-specific fields
-Emit ONLY the sub-fields for the Activity Type you picked. Omit the entire section if the type has no extras. Numeric fields you cannot derive from the source get the literal placeholder `(fill from analytics before submitting)`.
-{custom_block}
-# Source item
-{source_note}
-- URL: {item['url']}
-- Title: {item['title']}
-- Tags (from the feed, AUTHORITATIVE for topic classification): {', '.join(item.get('tags') or []) or '(none)'}
-- Body: {item['summary']}
-- Published (raw): {item['published']}
-
-===== Activity Types reference =====
-{activity_types}
-
-===== Technology Areas reference =====
-{tech_areas}
-
-===== Template to fill =====
-{template}
-"""
+        source_note = (PROMPTS_DIR / "wmma_source_note.md").read_text()
+    else:
+        source_note = ""
+    return _load_drafter_template().safe_substitute(
+        custom_block=custom_block,
+        source_note=source_note,
+        url=item["url"],
+        title=item["title"],
+        tags=", ".join(item.get("tags") or []) or "(none)",
+        body=item["summary"],
+        published=item["published"],
+        activity_types=activity_types,
+        tech_areas=tech_areas,
+        template=template,
+    )
 
 
 def _extract_activity_type(md: str) -> str | None:
@@ -561,137 +389,5 @@ def main() -> int:
     return 0
 
 
-def _self_check() -> None:
-    assert slug_from_url("https://rksolutions.nl/posts/macos-laps/") == "posts-macos-laps"
-    assert slug_from_url("https://example.com/") == "example-com"
-    assert slug_from_url("https://example.com") == "example-com"  # no trailing slash
-    assert slug_from_url("https://example.com/héllo-wörld/") == "h-llo-w-rld"
-    assert slug_from_url("") == "activity"  # nothing usable -> fallback
-    # _strip_html edge cases: nested, empty, malformed.
-    assert _strip_html("<p><b>hi</b></p>") == "hi"
-    assert _strip_html("") == ""
-    assert _strip_html(None) == ""
-    assert _strip_html("<p") == "<p"  # no closing '>' -> passthrough
-    assert _strip_html("  <p>x</p>  ") == "x"
-    # build_prompt shape check: drafter prompt exposes source metadata + template heading.
-    _stub_tpl = "## Activity Type\n<value>\n\n## Title\n<value>\n"
-    _bp = build_prompt(
-        {"url": "https://ex.com/post", "title": "Sample title",
-         "tags": ["Intune", "Entra"], "summary": "body", "published": "2026-07-01"},
-        _stub_tpl,
-    )
-    assert "https://ex.com/post" in _bp
-    assert "Sample title" in _bp
-    assert "Intune, Entra" in _bp
-    assert "## Activity Type" in _bp
-    # build_filter_prompt shape: keywords, exclude, title all present in the output.
-    _p = build_filter_prompt(
-        {"title": "Intune tip", "tags": ["Intune"], "summary": "body"},
-        ["Intune"], ["sponsored"],
-    )
-    assert "Intune tip" in _p and "Intune" in _p and "sponsored" in _p
-    _p_none = build_filter_prompt({"title": "x", "tags": [], "summary": ""}, [], [])
-    assert "no include filter" in _p_none and "nothing to exclude" in _p_none
-    assert _extract_title("<title>Hello  World</title>") == "Hello  World"
-    assert _extract_meta_description(
-        '<meta name="description" content="A summary here">'
-    ) == "A summary here"
-    assert _extract_activity_type("## Activity Type\nBlog\n") == "Blog"
-    assert _extract_activity_type(
-        "# MVP Activity: X\n\n## Activity Type\nPodcast\n\n## Title\nY"
-    ) == "Podcast"
-    assert _extract_activity_type("## Title\nNo activity type here") is None
-    assert ACTIVITY_TYPE_SLUGS["Speaker/Presenter at Microsoft Event"] == "event"
-    assert ACTIVITY_TYPE_SLUGS["Speaker/Presenter at Third-party Event"] == "event"
-    assert parse_start_date(None) is None
-    assert parse_start_date("") is None
-    assert parse_start_date("not-a-date") is None
-    assert parse_start_date("2026-07-04") == date(2026, 7, 4)
-    _st = time.struct_time((2026, 7, 4, 12, 0, 0, 0, 0, 0))
-    _st_old = time.struct_time((2025, 1, 1, 12, 0, 0, 0, 0, 0))
-    assert is_after_start_date({"published_parsed": _st}, date(2026, 1, 1)) is True
-    assert is_after_start_date({"published_parsed": _st_old}, date(2026, 1, 1)) is False
-    assert is_after_start_date({"published_parsed": None}, date(2026, 1, 1)) is True
-    assert is_after_start_date({"published_parsed": _st_old}, None) is True
-    # classify_item short-circuits when both filter lists are empty (no API call).
-    assert classify_item({"title": "x", "summary": "", "tags": []}, [], [], "no-token", "no-model") is True
-    # classify_item verdict parsing: swap the LLM call so we exercise pure logic.
-    _real_call = globals()["call_github_models"]
-    try:
-        _item = {"title": "x", "summary": "y", "tags": [], "url": "u"}
-        for verdict, expected in (
-            ("include", True),
-            ("exclude", False),
-            ("exclude - off-topic bio mention", False),
-            ("INCLUDE\n", True),
-            ("", True),  # empty response defaults to include
-        ):
-            globals()["call_github_models"] = lambda p, t, m, _v=verdict: _v
-            assert classify_item(_item, ["Intune"], [], "t", "m") is expected, verdict
-    finally:
-        globals()["call_github_models"] = _real_call
-    assert item_date_iso({"published_parsed": _st}) == "2026-07-04"
-    assert item_date_iso({"published_parsed": None}) == date.today().isoformat()
-    assert _pick_body({"content": [{"value": "<p>hi</p>"}]}) == "hi"
-    assert _pick_body({"summary": "<b>fallback</b>"}) == "fallback"
-    assert _pick_body({"content": [{"value": "x" * 10000}]}) == "x" * MAX_BODY_CHARS
-    assert _parse_iso_struct(None) is None
-    assert _parse_iso_struct("") is None
-    assert _parse_iso_struct("not-a-date") is None
-    _pi = _parse_iso_struct("2026-07-04")
-    assert _pi is not None and _pi.tm_year == 2026 and _pi.tm_mon == 7 and _pi.tm_mday == 4
-    _norm = list(_normalize_sources(["https://a.example/feed"]))
-    assert _norm == [("https://a.example/feed", {})]
-    _norm = list(_normalize_sources([
-        "https://a.example/feed",
-        {"url": "https://b.example/feed", "keywords": ["Foo"]},
-        {"no_url": True},
-    ]))
-    assert _norm[0] == ("https://a.example/feed", {})
-    assert _norm[1][0] == "https://b.example/feed" and _norm[1][1]["keywords"] == ["Foo"]
-    assert len(_norm) == 2  # entry without url is dropped
-    assert list(_normalize_sources(None)) == []
-    # Per-source vs global precedence is now enforced in main() around the
-    # classifier call. Semantic classification itself is exercised via
-    # build_filter_prompt (shape) and classify_item (short-circuit) above.
-    # Shipped config must be valid YAML - guards against the "keywords: []
-    # followed by commented example items" pattern that breaks the moment
-    # a user un-comments a real item.
-    parsed = load_config()
-    assert isinstance(parsed, dict)
-    assert isinstance(parsed.get("sources") or [], list)
-    assert isinstance(parsed.get("keywords") or [], list)
-    assert isinstance(parsed.get("exclude_keywords") or [], list)
-    _real = CUSTOM_INSTRUCTIONS_PATH.read_text() if CUSTOM_INSTRUCTIONS_PATH.exists() else ""
-    try:
-        CUSTOM_INSTRUCTIONS_PATH.write_text("<!-- only a comment -->\n\n")
-        assert load_custom_instructions() == ""
-        CUSTOM_INSTRUCTIONS_PATH.write_text("<!-- comment -->\nreal note here\n")
-        assert "real note here" in load_custom_instructions()
-    finally:
-        CUSTOM_INSTRUCTIONS_PATH.write_text(_real)
-    import tempfile
-    with tempfile.NamedTemporaryFile("w+", delete=False) as f:
-        tmp = f.name
-    try:
-        os.environ["GITHUB_OUTPUT"] = tmp
-        _emit_workflow_outputs(set(), False)
-        assert "has_new=false" in Path(tmp).read_text()
-        assert "auto_merge=false" in Path(tmp).read_text()
-        Path(tmp).write_text("")
-        _emit_workflow_outputs({"Blog", "Podcast"}, True)
-        out = Path(tmp).read_text()
-        assert "has_new=true" in out
-        assert "types=blog-podcast" in out
-        assert "auto_merge=true" in out
-    finally:
-        os.environ.pop("GITHUB_OUTPUT", None)
-        os.unlink(tmp)
-    print("self-check ok")
-
-
 if __name__ == "__main__":
-    if "--self-check" in sys.argv:
-        _self_check()
-    else:
-        sys.exit(main())
+    sys.exit(main())

@@ -1,0 +1,2 @@
+
+Source: wheremymvps.at attendance record. The Summary field is a JSON object with 'speaker' (userId, userName, status) and 'conference' (name, location, country, startDate, endDate, description, topics, website). Choose Activity Type = 'Speaker/Presenter at Microsoft Event' if the conference name matches a known Microsoft event (Build, Ignite, Inspire, MVP Summit, RD Summit, MLSA Summit); otherwise 'Speaker/Presenter at Third-party Event'. Use conference.startDate for Published Date. Use conference.website for Activity URL if present.

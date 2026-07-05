@@ -21,4 +21,4 @@ jobs:
         run: pip install -r scripts/requirements.txt
 
       - name: Run self-check
-        run: python scripts/monitor.py --self-check
+        run: python scripts/test_monitor.py
