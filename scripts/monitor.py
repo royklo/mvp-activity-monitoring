@@ -532,6 +532,14 @@ def _self_check() -> None:
     _pi = _parse_iso_struct("2026-07-04")
     assert _pi is not None and _pi.tm_year == 2026 and _pi.tm_mon == 7 and _pi.tm_mday == 4
     assert _haystack({"title": "Ab", "summary": "Cd", "url": "Ef"}) == "ab cd ef"
+    # Shipped config must be valid YAML - guards against the "keywords: []
+    # followed by commented example items" pattern that breaks the moment
+    # a user un-comments a real item.
+    parsed = load_config()
+    assert isinstance(parsed, dict)
+    assert isinstance(parsed.get("sources") or [], list)
+    assert isinstance(parsed.get("keywords") or [], list)
+    assert isinstance(parsed.get("exclude_keywords") or [], list)
     _real = CUSTOM_INSTRUCTIONS_PATH.read_text() if CUSTOM_INSTRUCTIONS_PATH.exists() else ""
     try:
         CUSTOM_INSTRUCTIONS_PATH.write_text("<!-- only a comment -->\n\n")
