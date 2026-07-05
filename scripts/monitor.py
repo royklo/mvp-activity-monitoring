@@ -446,9 +446,13 @@ def main() -> int:
     seen = load_state()
 
     new_items = []
+    keyword_rejects = 0
+    total_rss_items = 0
     # start_date and exclude misses don't get marked seen, so loosening
     # either config value later resurfaces the items on the next run.
     for item in chain(gather_items(sources), gather_wheremymvpsat(config)):
+        if item.get("source") != "wheremymvpsat":
+            total_rss_items += 1
         if not item["url"] or item["url"] in seen:
             continue
         if not is_after_start_date(item, start_date):
@@ -458,9 +462,20 @@ def main() -> int:
         # wheremymvps.at rows already scope to this MVP via PAT+userId,
         # so the include-keyword filter would only get in the way.
         if item.get("source") != "wheremymvpsat" and not matches_keywords(item, keywords):
+            keyword_rejects += 1
             seen.add(item["url"])
             continue
         new_items.append(item)
+
+    # Heuristic: user set `keywords` on a feed they probably own. Every RSS
+    # item was rejected by the keyword filter -> likely misconfigured.
+    if keywords and total_rss_items and keyword_rejects == total_rss_items:
+        print(
+            f"! all {total_rss_items} RSS items were dropped by the keywords filter. "
+            "If you own the feeds in `sources`, empty `keywords:` in config.yml - "
+            "your own posts almost never contain your own name.",
+            file=sys.stderr,
+        )
 
     if not new_items:
         print("no new items")

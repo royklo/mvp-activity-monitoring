@@ -6,12 +6,12 @@ sources:
   # - https://anchor.fm/your-podcast/rss
   # - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
 
-# Include filter. Leave empty for sources you own; for community
-# aggregators list your name and handles so only your content passes.
-# When you add items, drop the ": null" and use "  - value" lines.
+# Include filter. LEAVE EMPTY for feeds you author yourself - every
+# item there is yours by definition and setting your name would filter
+# them all out. Only set this if you're monitoring a feed you do NOT
+# own (community aggregator, event catalog, a co-host's podcast) - then
+# add your name/handles below so only items about or by you pass.
 keywords:
-  # - Your Name
-  # - your-handle
 
 # Exclude filter. Case-insensitive substring on title/summary/URL.
 exclude_keywords:
