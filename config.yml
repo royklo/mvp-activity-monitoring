@@ -4,28 +4,31 @@
 # or use the global fallback further down when omitted.
 sources:
   - url: https://your-blog.example.com/feed.xml
-    # keywords / exclude_keywords: leave blank for no filter, or add
-    # dash items to enable. Do NOT write `[]` when you have items -
+    # keywords / exclude_keywords are SEMANTIC TOPIC HINTS - a language
+    # model reads each post and decides whether it's primarily on-topic.
+    # Passing mentions ("hi, I work at Inforcer, this post is about
+    # Intune...") do NOT trigger exclusion; only substantive coverage
+    # of a listed topic does. Leave blank for no filter, or add dash
+    # items to enable. Do NOT write `[]` when you have items -
     # `[]` and dash items on the same key is invalid YAML.
     keywords:
-      # - "<your name>"
-      # - "<your-github-login>"
-      # - "@<your-handle>"
+      # - Intune
+      # - Microsoft Graph
+      # - Entra ID
     exclude_keywords:
-      # - "sponsored"
-      # - "<your-employer>"
+      # - sponsored content
+      # - product marketing
 
-# GLOBAL fallback filters.
+# GLOBAL fallback filters (same semantic hint rules as per-source).
 # Only apply to sources listed above as a BARE URL STRING (shorthand form,
 # no `url:` key, no per-source keywords/exclude_keywords). Sources defined
 # with the dict form ignore these completely and use their own lists.
-# Same shape as the per-source lists above - leave blank or add dash items.
 keywords:
-  # - "<your name>"
-  # - "<your-github-login>"
+  # - Intune
+  # - Microsoft Graph
 exclude_keywords:
-  # - "sponsored"
-  # - "<your-employer>"
+  # - sponsored content
+  # - <your-employer>-branded posts
 
 # start_date: 2026-01-01
 auto_merge: false

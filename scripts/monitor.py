@@ -219,10 +219,6 @@ def _struct_time_to_date(st) -> date | None:
     return date(st.tm_year, st.tm_mon, st.tm_mday)
 
 
-def _haystack(item: dict) -> str:
-    return f"{item['title']} {item['summary']} {item['url']}".lower()
-
-
 # --- filters ----------------------------------------------------------
 
 def parse_start_date(value) -> date | None:
@@ -244,18 +240,54 @@ def is_after_start_date(item: dict, start_date: date | None) -> bool:
     return True if d is None else d >= start_date
 
 
-def matches_keywords(item: dict, keywords: list[str]) -> bool:
-    if not keywords:
+def build_filter_prompt(item: dict, keywords: list[str], exclude_keywords: list[str]) -> str:
+    """Semantic pre-filter: ask the model whether the content is on-topic.
+
+    Substring matching drops posts that MENTION a term but aren't about it
+    ("my name is Roy, I work for Inforcer, and this post is on Intune...")
+    and misses posts that ARE about a topic but never say the exact string
+    in the title. Passing the keywords/exclude_keywords as topic hints and
+    letting the model read the actual content gives accurate filtering.
+    """
+    inc = "\n".join(f"- {k}" for k in keywords) if keywords else "(no include filter - accept anything on-topic for an MVP)"
+    exc = "\n".join(f"- {k}" for k in exclude_keywords) if exclude_keywords else "(nothing to exclude)"
+    tags = ", ".join(item.get("tags") or []) or "(none)"
+    return f"""Decide whether the content below should become a Microsoft MVP program activity entry.
+
+Content:
+- Title: {item['title']}
+- Tags (author-provided): {tags}
+- Body excerpt: {item['summary']}
+
+Topics the MVP tracks (INCLUDE if primarily about any of these):
+{inc}
+
+Topics the MVP wants to skip (EXCLUDE only if the content is SUBSTANTIVELY about any of these; a passing mention in an intro, bio, or aside does NOT count):
+{exc}
+
+Rules:
+- Match on topic, not literal string presence. "Post about Intune with an intro mentioning Inforcer" is INCLUDE, not EXCLUDE.
+- Include filter (if set) means the content's PRIMARY topic must be in that list. Peripheral mention is not enough.
+- Exclude filter overrides include when the primary topic actually is one of the excluded ones.
+- No include filter means accept anything the MVP might reasonably log.
+
+Answer with a single word on its own line: `include` or `exclude`."""
+
+
+def classify_item(item: dict, keywords: list[str], exclude_keywords: list[str], token: str, model: str) -> bool:
+    """True if the item should be kept, False if it should be dropped."""
+    # No filters set -> nothing to decide, keep everything. Saves an API call.
+    if not keywords and not exclude_keywords:
         return True
-    hay = _haystack(item)
-    return any(k.lower() in hay for k in keywords)
-
-
-def matches_exclude(item: dict, exclude_keywords: list[str]) -> bool:
-    if not exclude_keywords:
-        return False
-    hay = _haystack(item)
-    return any(k.lower() in hay for k in exclude_keywords)
+    prompt = build_filter_prompt(item, keywords, exclude_keywords)
+    try:
+        verdict = call_github_models(prompt, token, model).lower().strip()
+    except httpx.HTTPError as exc:
+        print(f"! filter classifier failed for {item['url']}: {exc}; keeping item", file=sys.stderr)
+        return True
+    # First word of the response is the answer; anything but "exclude" keeps.
+    first = verdict.split()[0] if verdict else "include"
+    return first != "exclude"
 
 
 def item_date_iso(item: dict) -> str:
@@ -459,10 +491,10 @@ def main() -> int:
     seen = load_state()
 
     new_items = []
-    keyword_rejects = 0
+    classifier_rejects = 0
     total_rss_items = 0
-    # start_date and exclude misses don't get marked seen, so loosening
-    # either config value later resurfaces the items on the next run.
+    # start_date misses don't get marked seen, so moving start_date earlier
+    # later resurfaces those items on the next run.
     for item in chain(gather_items(sources), gather_wheremymvpsat(config)):
         if item.get("source") != "wheremymvpsat":
             total_rss_items += 1
@@ -470,28 +502,28 @@ def main() -> int:
             continue
         if not is_after_start_date(item, start_date):
             continue
-        # Per-source overrides fall back to the global lists when absent.
+        # Per-source overrides fall back to global when the key is missing
+        # OR present-but-null (commented-only YAML). Explicit [] overrides.
         src_cfg = item.get("_source_cfg") or {}
-        effective_exclude = src_cfg.get("exclude_keywords", exclude_keywords)
-        effective_keywords = src_cfg.get("keywords", keywords)
-        if matches_exclude(item, effective_exclude):
-            continue
-        # wheremymvps.at rows already scope to this MVP via PAT+userId,
-        # so the include-keyword filter would only get in the way.
-        if item.get("source") != "wheremymvpsat" and not matches_keywords(item, effective_keywords):
-            keyword_rejects += 1
-            seen.add(item["url"])
-            continue
+        _src_ex = src_cfg.get("exclude_keywords")
+        _src_kw = src_cfg.get("keywords")
+        effective_exclude = _src_ex if _src_ex is not None else exclude_keywords
+        effective_keywords = _src_kw if _src_kw is not None else keywords
+        # wheremymvps.at rows already scope to this MVP via PAT+userId -
+        # skip semantic filtering entirely for those.
+        if item.get("source") != "wheremymvpsat" and (effective_keywords or effective_exclude):
+            if not classify_item(item, effective_keywords or [], effective_exclude or [], token, model):
+                classifier_rejects += 1
+                seen.add(item["url"])
+                print(f"filter dropped: {item['url']}", file=sys.stderr)
+                continue
         new_items.append(item)
 
-    # Heuristic: at least one source has a non-empty keywords filter AND
-    # every RSS item got dropped by it -> likely misconfigured (typically:
-    # user set their own name as a filter on their own feed).
-    if total_rss_items and keyword_rejects == total_rss_items:
+    if total_rss_items and classifier_rejects == total_rss_items:
         print(
-            f"! all {total_rss_items} RSS items were dropped by the keywords filter. "
-            "If a filtered source is a feed you own, set `keywords: []` on it in "
-            "config.yml - your own posts almost never contain your own name.",
+            f"! the semantic filter dropped every one of the {total_rss_items} "
+            "RSS items. Double-check `keywords` / `exclude_keywords` in "
+            "config.yml - the topic hints may be too narrow.",
             file=sys.stderr,
         )
 
@@ -527,9 +559,14 @@ def main() -> int:
 def _self_check() -> None:
     assert slug_from_url("https://rksolutions.nl/posts/macos-laps/") == "posts-macos-laps"
     assert slug_from_url("https://example.com/") == "example-com"
-    assert matches_keywords({"title": "Intune tip", "summary": "", "url": ""}, ["intune"]) is True
-    assert matches_keywords({"title": "Random", "summary": "", "url": ""}, ["intune"]) is False
-    assert matches_keywords({"title": "x", "summary": "", "url": ""}, []) is True
+    # build_filter_prompt shape: keywords, exclude, title all present in the output.
+    _p = build_filter_prompt(
+        {"title": "Intune tip", "tags": ["Intune"], "summary": "body"},
+        ["Intune"], ["sponsored"],
+    )
+    assert "Intune tip" in _p and "Intune" in _p and "sponsored" in _p
+    _p_none = build_filter_prompt({"title": "x", "tags": [], "summary": ""}, [], [])
+    assert "no include filter" in _p_none and "nothing to exclude" in _p_none
     assert _extract_title("<title>Hello  World</title>") == "Hello  World"
     assert _extract_meta_description(
         '<meta name="description" content="A summary here">'
@@ -551,9 +588,8 @@ def _self_check() -> None:
     assert is_after_start_date({"published_parsed": _st_old}, date(2026, 1, 1)) is False
     assert is_after_start_date({"published_parsed": None}, date(2026, 1, 1)) is True
     assert is_after_start_date({"published_parsed": _st_old}, None) is True
-    assert matches_exclude({"title": "About Sponsored", "summary": "", "url": ""}, ["sponsored"]) is True
-    assert matches_exclude({"title": "Something else", "summary": "", "url": ""}, ["sponsored"]) is False
-    assert matches_exclude({"title": "x", "summary": "", "url": ""}, []) is False
+    # classify_item short-circuits when both filter lists are empty (no API call).
+    assert classify_item({"title": "x", "summary": "", "tags": []}, [], [], "no-token", "no-model") is True
     assert item_date_iso({"published_parsed": _st}) == "2026-07-04"
     assert item_date_iso({"published_parsed": None}) == date.today().isoformat()
     assert _pick_body({"content": [{"value": "<p>hi</p>"}]}) == "hi"
@@ -564,7 +600,6 @@ def _self_check() -> None:
     assert _parse_iso_struct("not-a-date") is None
     _pi = _parse_iso_struct("2026-07-04")
     assert _pi is not None and _pi.tm_year == 2026 and _pi.tm_mon == 7 and _pi.tm_mday == 4
-    assert _haystack({"title": "Ab", "summary": "Cd", "url": "Ef"}) == "ab cd ef"
     _norm = list(_normalize_sources(["https://a.example/feed"]))
     assert _norm == [("https://a.example/feed", {})]
     _norm = list(_normalize_sources([
@@ -576,27 +611,9 @@ def _self_check() -> None:
     assert _norm[1][0] == "https://b.example/feed" and _norm[1][1]["keywords"] == ["Foo"]
     assert len(_norm) == 2  # entry without url is dropped
     assert list(_normalize_sources(None)) == []
-    # Integration: per-source overrides beat global; wmma bypasses include filter.
-    def _apply(item, global_keywords, global_exclude):
-        src = item.get("_source_cfg") or {}
-        eff_ex = src.get("exclude_keywords", global_exclude)
-        eff_kw = src.get("keywords", global_keywords)
-        if matches_exclude(item, eff_ex):
-            return "excluded"
-        if item.get("source") != "wheremymvpsat" and not matches_keywords(item, eff_kw):
-            return "keyword-drop"
-        return "pass"
-    _own = {"title": "macOS LAPS", "summary": "", "url": "https://mine.example/x", "_source_cfg": {"keywords": [], "exclude_keywords": []}}
-    _agg = {"title": "Something by Roy Klooster", "summary": "", "url": "https://x", "_source_cfg": {"keywords": ["Roy Klooster"]}}
-    _agg_miss = {"title": "Nothing here", "summary": "", "url": "https://x", "_source_cfg": {"keywords": ["Roy Klooster"]}}
-    _bare_global = {"title": "post", "summary": "", "url": "https://x", "_source_cfg": {}}
-    _wmma = {"title": "Conf", "summary": "", "url": "https://x", "source": "wheremymvpsat", "_source_cfg": None}
-    assert _apply(_own, ["should-not-apply"], []) == "pass"       # per-source [] wins over global
-    assert _apply(_agg, [], []) == "pass"                          # per-source keyword matches
-    assert _apply(_agg_miss, [], []) == "keyword-drop"             # per-source keyword rejects
-    assert _apply(_bare_global, ["post"], []) == "pass"            # bare falls back to global
-    assert _apply(_bare_global, ["missing"], []) == "keyword-drop" # global mismatch drops
-    assert _apply(_wmma, ["irrelevant"], []) == "pass"             # wmma bypasses include filter
+    # Per-source vs global precedence is now enforced in main() around the
+    # classifier call. Semantic classification itself is exercised via
+    # build_filter_prompt (shape) and classify_item (short-circuit) above.
     # Shipped config must be valid YAML - guards against the "keywords: []
     # followed by commented example items" pattern that breaks the moment
     # a user un-comments a real item.

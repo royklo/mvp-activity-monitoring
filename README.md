@@ -70,12 +70,14 @@ auto_merge: false
 | Field | What it does |
 |---|---|
 | `sources` | Feeds or URLs. Bare string = uses global filters. Dict with `url:` = can override `keywords` / `exclude_keywords` for that source only. |
-| `keywords` (global) | Include filter. Empty = accept all. Set only if a source you don't own also uses global filters. |
-| `exclude_keywords` (global) | Case-insensitive drop list. Applied before include. |
+| `keywords` (global/per-source) | **Semantic** topic hints. A language model reads each post and asks: "is this primarily on one of these topics?" Empty = accept anything. |
+| `exclude_keywords` (global/per-source) | **Semantic** exclusion. A post is dropped only when its primary topic matches — passing mentions of the excluded term in an intro or bio do NOT trigger exclusion. |
 | `start_date` | YYYY-MM-DD lower bound on publish date. |
 | `auto_merge` | Auto-merge nightly PRs if they're mergeable. |
 
-**When per-source overrides are useful:** your own blog needs no filter (accept everything), but a community aggregator or a co-host's podcast needs `keywords: [Your Name]` to isolate your content. Set both in the same run without conflict — bare strings use global (empty), dict sources override.
+**Why semantic and not substring:** a post titled *"macOS LAPS vs. Intune Compliance Policy"* whose intro says *"I work at Inforcer"* should be logged as an Intune activity, not dropped because "Inforcer" appears once. The classifier reads the whole post plus tags and decides on topic, not on string presence. Costs one extra small model call per RSS item — negligible on GH Models free tier.
+
+**When per-source overrides are useful:** your own blog and a community aggregator can have completely different include/exclude lists.
 
 Technology Area and Target Audience are **not** in config — the model picks them per item from what the content actually is. If it can't decide, it writes `(uncertain - please review)` and you fill it in.
 
