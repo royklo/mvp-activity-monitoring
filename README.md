@@ -45,30 +45,35 @@ Quick summary of the three things you'll actually edit:
 Filters can be global (apply to every source) or **per-source** (override on a specific feed). Bare URL strings inherit global filters; dict-shape sources can carry their own `keywords` / `exclude_keywords`:
 
 ```yaml
+# MVP activity monitor config. See README.md for details.
+
+# keywords / exclude_keywords are semantic topic hints (not substrings).
 sources:
-  # Bare URL = inherits global filters below
-  - https://yourblog.example.com/feed.xml
-
-  # Dict form = per-source semantic topic hints
-  - url: https://community-aggregator.example.com/feed.xml
+  - url: https://your-blog.example.com/feed.xml
     keywords:
-      - Intune
-      - Microsoft Graph
-      - Entra ID
     exclude_keywords:
-      - Power BI
-  - url: https://anchor.fm/some-podcast/rss
+      # - sponsored content
+      # - product marketing for <your employer>
+  - url: https://third-party-website.example.com/feed.xml
     keywords:
-      - macOS management
-    exclude_keywords: []
+      - <your name>
+    exclude_keywords:
+      # - sponsored content
+      # - product marketing for <your employer>
 
-# Global filters — used only for bare URL sources above.
-keywords:                # leave empty when every bare source is on-topic
+# Global fallbacks - used only for bare-URL sources above.
+keywords:
 exclude_keywords:
-  - sponsored content
+  - <your employer>
+  - sponsored
 
-start_date: 2026-07-01   # optional: skip your back-catalogue
+# start_date: 2026-01-01
 auto_merge: false
+model: openai/gpt-4.1
+
+wheremymvpsat:
+  enabled: false
+  # user_id: your-github-login
 ```
 
 | Field | What it does |
