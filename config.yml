@@ -8,12 +8,13 @@ sources:
 
 # Include filter. Leave empty for sources you own; for community
 # aggregators list your name and handles so only your content passes.
-keywords: []
+# When you add items, drop the ": null" and use "  - value" lines.
+keywords:
   # - Your Name
   # - your-handle
 
 # Exclude filter. Case-insensitive substring on title/summary/URL.
-exclude_keywords: []
+exclude_keywords:
   # - sponsored
   # - your-employer-name
 
