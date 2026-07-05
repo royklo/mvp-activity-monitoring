@@ -42,8 +42,6 @@ ACTIVITY_TYPE_SLUGS = {
 }
 
 
-# --- config / state ---------------------------------------------------
-
 def load_config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text()) or {}
 
@@ -67,8 +65,6 @@ def load_custom_instructions() -> str:
     stripped = re.sub(r"<!--.*?-->", "", raw, flags=re.S).strip()
     return raw if stripped else ""
 
-
-# --- gather -----------------------------------------------------------
 
 def _normalize_sources(sources):
     """Yield (url, per_source_config) tuples. Accepts either bare URL strings
@@ -161,8 +157,6 @@ def gather_wheremymvpsat(config: dict):
         }
 
 
-# --- content helpers --------------------------------------------------
-
 def _pick_body(entry) -> str:
     # Prefer entry.content[0].value (full body) over entry.summary (excerpt).
     content = entry.get("content") or []
@@ -218,8 +212,6 @@ def _struct_time_to_date(st) -> date | None:
         return None
     return date(st.tm_year, st.tm_mon, st.tm_mday)
 
-
-# --- filters ----------------------------------------------------------
 
 def parse_start_date(value) -> date | None:
     if not value:
@@ -301,8 +293,6 @@ def slug_from_url(url: str) -> str:
     slug = re.sub(r"[^a-z0-9-]+", "-", path.lower()).strip("-")
     return slug[:80] or "activity"
 
-
-# --- model + prompt ---------------------------------------------------
 
 def call_github_models(prompt: str, token: str, model: str) -> str:
     r = httpx.post(
@@ -447,8 +437,6 @@ Emit ONLY the sub-fields for the Activity Type you picked. Omit the entire secti
 """
 
 
-# --- workflow outputs -------------------------------------------------
-
 def _extract_activity_type(md: str) -> str | None:
     m = re.search(r"^##\s+Activity Type\s*\n+([^\n]+)", md, re.M)
     return m.group(1).strip() if m else None
@@ -464,8 +452,6 @@ def _emit_workflow_outputs(types_found: set[str], auto_merge: bool) -> None:
         f.write(f"types={'-'.join(slugs)}\n")
         f.write(f"auto_merge={'true' if auto_merge else 'false'}\n")
 
-
-# --- main -------------------------------------------------------------
 
 def main() -> int:
     config = load_config()
@@ -553,8 +539,6 @@ def main() -> int:
     _emit_workflow_outputs(types_found, auto_merge)
     return 0
 
-
-# --- self-check -------------------------------------------------------
 
 def _self_check() -> None:
     assert slug_from_url("https://rksolutions.nl/posts/macos-laps/") == "posts-macos-laps"

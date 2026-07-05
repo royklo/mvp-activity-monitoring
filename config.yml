@@ -1,41 +1,22 @@
-# MVP activity monitor config. Full details in README.md.
+# MVP activity monitor config. See README.md for details.
 
-# Sources can declare their own keywords/exclude_keywords (recommended)
-# or use the global fallback further down when omitted.
+# keywords / exclude_keywords are semantic topic hints (not substrings).
 sources:
   - url: https://your-blog.example.com/feed.xml
-    # keywords / exclude_keywords are SEMANTIC TOPIC HINTS - a language
-    # model reads each post and decides whether it's primarily on-topic.
-    # Passing mentions ("hi, I work at Inforcer, this post is about
-    # Intune...") do NOT trigger exclusion; only substantive coverage
-    # of a listed topic does. Leave blank for no filter, or add dash
-    # items to enable. Do NOT write `[]` when you have items -
-    # `[]` and dash items on the same key is invalid YAML.
     keywords:
       # - Intune
       # - Microsoft Graph
-      # - Entra ID
     exclude_keywords:
       # - sponsored content
-      # - product marketing
 
-# GLOBAL fallback filters (same semantic hint rules as per-source).
-# Only apply to sources listed above as a BARE URL STRING (shorthand form,
-# no `url:` key, no per-source keywords/exclude_keywords). Sources defined
-# with the dict form ignore these completely and use their own lists.
+# Global fallbacks - used only for bare-URL sources above.
 keywords:
-  # - Intune
-  # - Microsoft Graph
 exclude_keywords:
-  # - sponsored content
-  # - <your-employer>-branded posts
 
 # start_date: 2026-01-01
 auto_merge: false
-model: openai/gpt-4.1  # gpt-5 rejects temperature=0 without a code patch
+model: openai/gpt-4.1
 
-# Optional wheremymvps.at conference sync. Needs repo secret
-# WHEREMYMVPSAT_PAT with the speakers:read scope.
 wheremymvpsat:
   enabled: false
   # user_id: your-github-login
