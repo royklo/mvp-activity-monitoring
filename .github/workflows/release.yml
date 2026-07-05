@@ -1,5 +1,12 @@
 name: Release
 
+# Auto-tags and publishes a GitHub release on every merge to main.
+# Guarded to the template repo only - downstream forks/templated
+# instances inherit this file but the job no-ops there, so their
+# daily monitor-PR merges don't spam release notifications. If you
+# maintain your own fork and want your own release cadence, change
+# the repository string below to `<your-owner>/<your-repo>`.
+
 on:
   push:
     branches: [main]
@@ -9,6 +16,7 @@ permissions:
 
 jobs:
   tag-and-release:
+    if: github.repository == 'royklo/mvp-activity-monitoring'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
