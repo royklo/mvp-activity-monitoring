@@ -564,6 +564,26 @@ def main() -> int:
 def _self_check() -> None:
     assert slug_from_url("https://rksolutions.nl/posts/macos-laps/") == "posts-macos-laps"
     assert slug_from_url("https://example.com/") == "example-com"
+    assert slug_from_url("https://example.com") == "example-com"  # no trailing slash
+    assert slug_from_url("https://example.com/héllo-wörld/") == "h-llo-w-rld"
+    assert slug_from_url("") == "activity"  # nothing usable -> fallback
+    # _strip_html edge cases: nested, empty, malformed.
+    assert _strip_html("<p><b>hi</b></p>") == "hi"
+    assert _strip_html("") == ""
+    assert _strip_html(None) == ""
+    assert _strip_html("<p") == "<p"  # no closing '>' -> passthrough
+    assert _strip_html("  <p>x</p>  ") == "x"
+    # build_prompt shape check: drafter prompt exposes source metadata + template heading.
+    _stub_tpl = "## Activity Type\n<value>\n\n## Title\n<value>\n"
+    _bp = build_prompt(
+        {"url": "https://ex.com/post", "title": "Sample title",
+         "tags": ["Intune", "Entra"], "summary": "body", "published": "2026-07-01"},
+        _stub_tpl,
+    )
+    assert "https://ex.com/post" in _bp
+    assert "Sample title" in _bp
+    assert "Intune, Entra" in _bp
+    assert "## Activity Type" in _bp
     # build_filter_prompt shape: keywords, exclude, title all present in the output.
     _p = build_filter_prompt(
         {"title": "Intune tip", "tags": ["Intune"], "summary": "body"},
@@ -595,6 +615,21 @@ def _self_check() -> None:
     assert is_after_start_date({"published_parsed": _st_old}, None) is True
     # classify_item short-circuits when both filter lists are empty (no API call).
     assert classify_item({"title": "x", "summary": "", "tags": []}, [], [], "no-token", "no-model") is True
+    # classify_item verdict parsing: swap the LLM call so we exercise pure logic.
+    _real_call = globals()["call_github_models"]
+    try:
+        _item = {"title": "x", "summary": "y", "tags": [], "url": "u"}
+        for verdict, expected in (
+            ("include", True),
+            ("exclude", False),
+            ("exclude - off-topic bio mention", False),
+            ("INCLUDE\n", True),
+            ("", True),  # empty response defaults to include
+        ):
+            globals()["call_github_models"] = lambda p, t, m, _v=verdict: _v
+            assert classify_item(_item, ["Intune"], [], "t", "m") is expected, verdict
+    finally:
+        globals()["call_github_models"] = _real_call
     assert item_date_iso({"published_parsed": _st}) == "2026-07-04"
     assert item_date_iso({"published_parsed": None}) == date.today().isoformat()
     assert _pick_body({"content": [{"value": "<p>hi</p>"}]}) == "hi"
