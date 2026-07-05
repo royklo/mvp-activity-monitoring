@@ -33,8 +33,8 @@ Only if you plan to set `auto_merge: true`.
 | Field | Set to |
 |---|---|
 | `sources` | Every RSS feed / page URL you want monitored |
-| `keywords` | Empty for your own feeds. Your name/handles for feeds you don't own. |
-| `exclude_keywords` | Substrings to drop (e.g. `sponsored`, employer name) |
+| `keywords` | Semantic topic hints (e.g. `Intune`, `Microsoft Graph`). Empty = accept any topic. |
+| `exclude_keywords` | Semantic topics to skip (e.g. `sponsored content`). Passing mentions of the term don't count — only content substantively on that topic gets dropped. |
 | `start_date` | YYYY-MM-DD — set this so your back-catalogue doesn't flood the first PR |
 | `auto_merge` | Leave `false` while you learn the drafts |
 | `model` | Default `openai/gpt-4.1` — anything from the [Models catalog](https://models.github.ai/catalog/models) works |
@@ -68,7 +68,7 @@ At [wheremymvps.at/api-console](https://wheremymvps.at/api-console):
 - [ ] `wheremymvpsat.user_id: <your-handle>` (from your profile URL slug, no `@`)
 - [ ] Commit + push
 
-> **Known upstream issue:** only 7 MVPs are currently visible in `/api/v1/speakers`. Enabling is safe — most users will just get zero rows until the maintainer fixes the data-population bug. See [goldjg/WhereMyMVPsAt#2](https://github.com/goldjg/WhereMyMVPsAt/issues/2).
+> The `/api/v1/speakers` endpoint returns records only when your wheremymvps.at profile has linked attendances. No events on your profile = zero rows — expected, not a bug. Add events on the site first, then enable this here.
 
 ## 6. (Optional) Custom model instructions
 
@@ -140,4 +140,4 @@ Your config, secrets, and merged activities are safe. The template only ever cha
 | Run succeeded, no PR | `has_new=false`. Check the run log — nothing new, all filtered, or all in `seen.json`. |
 | `(no second area detected)` or `(uncertain - please review)` in the file | Design, not a bug. The model deliberately flagged that field for you to decide. |
 | Model call HTTP 400 | `model:` value doesn't accept `temperature: 0`. Switch to `openai/gpt-4.1` or strip the temperature param in `call_github_models`. |
-| wheremymvps.at returns zero rows | Wrong `user_id`, missing `speakers:read` scope, or upstream data-population gap (see `TODO.md`). |
+| wheremymvps.at returns zero rows | Wrong `user_id`, missing `speakers:read` scope, or you haven't linked any events on your wheremymvps.at profile yet. |
