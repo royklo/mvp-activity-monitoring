@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 For pre-v1.5.0 releases, see [GitHub Releases](https://github.com/royklo/mvp-activity-monitoring/releases) - the tag-on-merge workflow auto-generates release notes there from Conventional Commit messages.
 
-## [Unreleased]
+## [v1.5.0] - 2026-07-06
 
 ### Added
 - **Weekly auto-sync workflow.** `.github/workflows/sync-template.yml` opens a PR titled `Sync from template <version>` on downstream instances whenever the template has new commits. Path list in `.github/template-sync-paths.txt`. Guarded off on the template repo itself.
