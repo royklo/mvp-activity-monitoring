@@ -4,13 +4,14 @@
 # or use the global fallback further down when omitted.
 sources:
   - url: https://your-blog.example.com/feed.xml
-    keywords: []
-      # e.g.
+    # keywords / exclude_keywords: leave blank for no filter, or add
+    # dash items to enable. Do NOT write `[]` when you have items -
+    # `[]` and dash items on the same key is invalid YAML.
+    keywords:
       # - "<your name>"
       # - "<your-github-login>"
       # - "@<your-handle>"
-    exclude_keywords: []
-      # e.g.
+    exclude_keywords:
       # - "sponsored"
       # - "<your-employer>"
 
@@ -18,14 +19,11 @@ sources:
 # Only apply to sources listed above as a BARE URL STRING (shorthand form,
 # no `url:` key, no per-source keywords/exclude_keywords). Sources defined
 # with the dict form ignore these completely and use their own lists.
-# Same shape as the per-source lists: `[]` = no filter, or add items with
-# `- "value"` on indented lines below.
-keywords: []
-  # e.g.
+# Same shape as the per-source lists above - leave blank or add dash items.
+keywords:
   # - "<your name>"
   # - "<your-github-login>"
-exclude_keywords: []
-  # e.g.
+exclude_keywords:
   # - "sponsored"
   # - "<your-employer>"
 
