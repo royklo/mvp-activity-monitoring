@@ -14,7 +14,11 @@ sources:
       # - "sponsored"
       # - "<your-employer>"
 
-# Global fallback filters (used only for sources without their own).
+# GLOBAL fallback filters.
+# Only apply to sources listed above as a BARE URL STRING (shorthand form,
+# no `url:` key, no per-source keywords/exclude_keywords). Sources defined
+# with the dict form ignore these completely and use their own lists.
+# Leave both empty if every source above already declares its own filters.
 keywords:
 exclude_keywords:
 
