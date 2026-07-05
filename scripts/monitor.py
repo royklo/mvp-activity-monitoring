@@ -108,17 +108,19 @@ def gather_items(sources):
 def gather_wheremymvpsat(config: dict):
     wmma = config.get("wheremymvpsat") or {}
     if not wmma.get("enabled"):
+        print("wheremymvpsat: disabled (config: enabled=false)")
         return
     user_id = wmma.get("user_id")
     if not user_id:
-        print("! wheremymvpsat.enabled=true but user_id is unset", file=sys.stderr)
+        print("! wheremymvpsat.enabled=true but user_id is unset - skipping", file=sys.stderr)
         return
     pat = os.environ.get("WHEREMYMVPSAT_PAT")
     if not pat:
-        print("! wheremymvpsat.enabled=true but WHEREMYMVPSAT_PAT is unset", file=sys.stderr)
+        print("! wheremymvpsat.enabled=true but WHEREMYMVPSAT_PAT secret is missing - skipping", file=sys.stderr)
         return
     base = wmma.get("base_url", "https://wheremymvps.at/api/v1").rstrip("/")
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/json"}
+    print(f"wheremymvpsat: enabled, user_id={user_id}")
 
     try:
         r = httpx.get(f"{base}/speakers", params={"$filter": f"userId eq '{user_id}'"}, headers=headers, timeout=30)
@@ -127,13 +129,13 @@ def gather_wheremymvpsat(config: dict):
     except httpx.HTTPError as exc:
         print(f"! wheremymvpsat /speakers failed: {exc}", file=sys.stderr)
         return
+    print(f"wheremymvpsat: /speakers filter=userId eq '{user_id}' -> {len(rows)} records")
     if not rows:
         print(
-            f"! wheremymvpsat /speakers returned 0 rows for userId '{user_id}'. "
-            "The value is case-sensitive and must not include a leading '@' - "
-            "profile shown as '@Jane-Doe' is stored as 'Jane-Doe'. If it's already "
-            "correct, the account simply has no linked events yet.",
-            file=sys.stderr,
+            f"wheremymvpsat: 0 records for userId '{user_id}'. Note the value is "
+            "case-sensitive and must NOT include the leading '@' (profile shown as "
+            "'@Jane-Doe' is stored as 'Jane-Doe'). If the id is already correct, "
+            "add events on your wheremymvps.at profile first."
         )
         return
 
@@ -147,6 +149,7 @@ def gather_wheremymvpsat(config: dict):
             for c in r.json().get("value", []):
                 if isinstance(c, dict) and c.get("id"):
                     conferences[c["id"]] = c
+            print(f"wheremymvpsat: /conferences enriched {len(conferences)}/{len(conf_ids)} records")
         except httpx.HTTPError as exc:
             print(f"! wheremymvpsat /conferences failed: {exc}", file=sys.stderr)
 
@@ -480,45 +483,56 @@ def main() -> int:
         print("! GITHUB_TOKEN not set", file=sys.stderr)
         return 1
 
+    print(f"config: {len(sources)} sources, model={model}, start_date={start_date or 'none'}")
+    print(f"        global keywords={keywords or '(none)'}, exclude={exclude_keywords or '(none)'}")
+
     template = TEMPLATE_PATH.read_text()
     seen = load_state()
 
     new_items = []
-    classifier_rejects = 0
-    total_rss_items = 0
+    stats = {"seen": 0, "pre_start": 0, "included": 0, "excluded": 0, "rss_total": 0, "wmma_total": 0}
     # start_date misses don't get marked seen, so moving start_date earlier
     # later resurfaces those items on the next run.
     for item in chain(gather_items(sources), gather_wheremymvpsat(config)):
-        if item.get("source") != "wheremymvpsat":
-            total_rss_items += 1
-        if not item["url"] or item["url"] in seen:
+        is_wmma = item.get("source") == "wheremymvpsat"
+        stats["wmma_total" if is_wmma else "rss_total"] += 1
+        url = item["url"]
+        if not url or url in seen:
+            stats["seen"] += 1
+            print(f"  seen  {url}")
             continue
         if not is_after_start_date(item, start_date):
+            stats["pre_start"] += 1
+            print(f"  old   {url}  (before start_date)")
             continue
-        # Per-source overrides fall back to global when the key is missing
-        # OR present-but-null (commented-only YAML). Explicit [] overrides.
         src_cfg = item.get("_source_cfg") or {}
         _src_ex = src_cfg.get("exclude_keywords")
         _src_kw = src_cfg.get("keywords")
         effective_exclude = _src_ex if _src_ex is not None else exclude_keywords
         effective_keywords = _src_kw if _src_kw is not None else keywords
-        # wheremymvps.at rows already scope to this MVP via PAT+userId -
-        # skip semantic filtering entirely for those.
-        if item.get("source") != "wheremymvpsat" and (effective_keywords or effective_exclude):
+        if not is_wmma and (effective_keywords or effective_exclude):
             if not classify_item(item, effective_keywords or [], effective_exclude or [], token, model):
-                classifier_rejects += 1
-                seen.add(item["url"])
-                print(f"filter dropped: {item['url']}", file=sys.stderr)
+                stats["excluded"] += 1
+                seen.add(url)
+                print(f"  exc   {url}  (classifier: exclude)")
                 continue
+        stats["included"] += 1
+        print(f"  inc   {url}")
         new_items.append(item)
 
-    if total_rss_items and classifier_rejects == total_rss_items:
-        print(
-            f"! the semantic filter dropped every one of the {total_rss_items} "
-            "RSS items. Double-check `keywords` / `exclude_keywords` in "
-            "config.yml - the topic hints may be too narrow.",
-            file=sys.stderr,
-        )
+    print(
+        f"filter summary: seen={stats['seen']} "
+        f"pre_start_date={stats['pre_start']} "
+        f"included={stats['included']} excluded={stats['excluded']} "
+        f"(from {stats['rss_total']} RSS + {stats['wmma_total']} wheremymvpsat)"
+    )
+    if stats["rss_total"] and stats["excluded"] == stats["rss_total"] - stats["seen"] - stats["pre_start"]:
+        if stats["excluded"] > 0:
+            print(
+                "! the semantic filter dropped every RSS item that made it through the pre-checks. "
+                "Double-check `keywords` / `exclude_keywords` - the topic hints may be too narrow.",
+                file=sys.stderr,
+            )
 
     if not new_items:
         print("no new items")

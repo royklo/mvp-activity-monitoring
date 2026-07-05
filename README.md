@@ -46,26 +46,28 @@ Filters can be global (apply to every source) or **per-source** (override on a s
 
 ```yaml
 sources:
-  # Simple string = inherits global filters below
-  - https://yourblog.example.com/feed.xml
-
-  # Dict form = per-source overrides
-  - url: https://community-aggregator.example.com/feed.xml
+  # Your own feed: empty filters accept everything you publish
+  - url: https://your-blog.example.com/feed.xml
     keywords:
-      - Your Name
-      - your-github-login
-  - url: https://co-host.example.com/podcast/rss
-    keywords:
-      - Your Name
+    exclude_keywords:
 
-# Global filters — used when a source doesn't specify its own.
-keywords:                # leave empty when every feed is yours
+  # Third-party feed you're published on: filter by yourself
+  - url: https://third-party-website.example.com/feed.xml
+    keywords:
+      # - "<your name>"     # replace placeholder before uncommenting
+    exclude_keywords:
+
+# Global fallbacks - used only for bare-URL sources above.
+keywords:
 exclude_keywords:
-  - sponsored
+  # - "<your employer>"     # replace placeholder before uncommenting
+  - sponsored content
 
-start_date: 2026-07-01   # optional: skip your back-catalogue
+start_date: 2026-01-01   # optional: skip your back-catalogue
 auto_merge: false
 ```
+
+For the full config (including `model:` and `wheremymvpsat:`), see [`config.yml`](config.yml) shipped in the template.
 
 | Field | What it does |
 |---|---|
