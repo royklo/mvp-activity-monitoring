@@ -128,6 +128,13 @@ def gather_wheremymvpsat(config: dict):
         print(f"! wheremymvpsat /speakers failed: {exc}", file=sys.stderr)
         return
     if not rows:
+        print(
+            f"! wheremymvpsat /speakers returned 0 rows for userId '{user_id}'. "
+            "The value is case-sensitive and must not include a leading '@' - "
+            "profile shown as '@Jane-Doe' is stored as 'Jane-Doe'. If it's already "
+            "correct, the account simply has no linked events yet.",
+            file=sys.stderr,
+        )
         return
 
     conf_ids = sorted({row["conferenceId"] for row in rows if row.get("conferenceId")})
