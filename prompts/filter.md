@@ -12,7 +12,7 @@ Topics the MVP wants to skip (EXCLUDE only if the content is SUBSTANTIVELY about
 $exclude_topics
 
 Rules:
-- Match on topic, not literal string presence. "Post about Intune with an intro mentioning Inforcer" is INCLUDE, not EXCLUDE.
+- Match on topic, not literal string presence. "Post about Intune with an intro mentioning the author's employer" is INCLUDE, not EXCLUDE.
 - Include filter (if set) means the content's PRIMARY topic must be in that list. Peripheral mention is not enough.
 - Exclude filter overrides include when the primary topic actually is one of the excluded ones.
 - No include filter means accept anything the MVP might reasonably log.

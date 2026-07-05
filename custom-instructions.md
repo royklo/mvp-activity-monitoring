@@ -15,8 +15,8 @@ Good things to put here (delete this comment and add your own):
   - Naming preferences: "Prefer 'Microsoft Entra ID' over 'Azure AD'."
   - Audience nudges: "Content on https://lab.example.com/* is beginner
     tutorial - always include 'Student' in Target Audience."
-  - Voice: "Match Roy's blog voice: direct, practical, no filler
-    adjectives. Never start Description with 'This blog post explores'."
+  - Voice: "Direct, practical, no filler adjectives. Never start
+    Description with 'This blog post explores'."
   - Exclusions: "Skip mentioning employer-specific product names in the
     Description or Private Description."
   - Rules that apply to specific sources or Activity Types.

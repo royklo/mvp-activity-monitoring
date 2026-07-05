@@ -1,0 +1,62 @@
+name: Sync from template
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"   # Monday 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    # Skip on the template repo itself. Downstream instances (forks and
+    # 'Use this template' clones) run this to pull template updates in.
+    if: github.repository != 'royklo/mvp-activity-monitoring'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch template
+        run: |
+          git remote add template https://github.com/royklo/mvp-activity-monitoring.git 2>/dev/null || true
+          git fetch template main --tags
+
+      - name: Overlay synced paths from template/main
+        run: |
+          # Read paths from the sync manifest, one per line, skip comments/blanks.
+          # Use the *template*'s copy so users get the current manifest even if
+          # they haven't merged a prior sync PR yet.
+          git show template/main:.github/template-sync-paths.txt \
+            | grep -v '^\s*#' | grep -v '^\s*$' \
+            | while read -r path; do
+                echo "sync: $path"
+                git checkout template/main -- "$path" 2>/dev/null || echo "  skip (missing on template)"
+              done
+
+      - name: Detect template version
+        id: v
+        run: |
+          v=$(git describe template/main --tags --abbrev=0 2>/dev/null || echo "template/main")
+          sha=$(git rev-parse --short template/main)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Open sync PR (skipped when nothing changed)
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: "chore: sync from template ${{ steps.v.outputs.version }}"
+          title: "Sync from template ${{ steps.v.outputs.version }}"
+          body: |
+            Automated sync from [`royklo/mvp-activity-monitoring`](https://github.com/royklo/mvp-activity-monitoring) at `${{ steps.v.outputs.version }}` (`${{ steps.v.outputs.sha }}`).
+
+            Files considered are listed in `.github/template-sync-paths.txt`. Your `config.yml`, `custom-instructions.md`, `.state/`, and `activities/` are not touched.
+
+            If you customized a synced file, review the diff and cherry-pick or close this PR.
+
+            To disable: delete `.github/workflows/sync-template.yml`.
+          branch: template-sync/latest
+          delete-branch: true

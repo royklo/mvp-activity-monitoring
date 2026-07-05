@@ -1,0 +1,18 @@
+# Paths synced from the template into downstream instances by
+# .github/workflows/sync-template.yml. One path per line. Directories
+# sync recursively. Comment lines and blank lines are ignored.
+#
+# When you add a new file/dir that should ship to every fork (a new
+# script, a new prompts subdir, a new workflow), add its path here.
+# SYNC.md must stay accurate about this list - see the skill file for
+# the update rule.
+scripts/
+prompts/
+templates/
+references/
+.github/workflows/
+.github/template-sync-paths.txt
+.gitignore
+README.md
+SETUP.md
+SYNC.md
