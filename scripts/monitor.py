@@ -70,8 +70,19 @@ def load_custom_instructions() -> str:
 
 # --- gather -----------------------------------------------------------
 
-def gather_items(sources: list[str]):
-    for source in sources:
+def _normalize_sources(sources):
+    """Yield (url, per_source_config) tuples. Accepts either bare URL strings
+    or dicts with a `url` key and optional `keywords` / `exclude_keywords`
+    overrides."""
+    for src in sources or []:
+        if isinstance(src, str):
+            yield src, {}
+        elif isinstance(src, dict) and src.get("url"):
+            yield src["url"], src
+
+
+def gather_items(sources):
+    for source, src_cfg in _normalize_sources(sources):
         parsed = feedparser.parse(source)
         if parsed.entries:
             for entry in parsed.entries:
@@ -82,6 +93,7 @@ def gather_items(sources: list[str]):
                     "tags": [t.get("term") for t in entry.get("tags", []) if t.get("term")],
                     "published": entry.get("published", ""),
                     "published_parsed": entry.get("published_parsed"),
+                    "_source_cfg": src_cfg,
                 }
             continue
         page = _fetch_page(source)
@@ -93,6 +105,7 @@ def gather_items(sources: list[str]):
             "summary": _extract_meta_description(page),
             "tags": [],
             "published": "",
+            "_source_cfg": src_cfg,
         }
 
 
@@ -457,23 +470,28 @@ def main() -> int:
             continue
         if not is_after_start_date(item, start_date):
             continue
-        if matches_exclude(item, exclude_keywords):
+        # Per-source overrides fall back to the global lists when absent.
+        src_cfg = item.get("_source_cfg") or {}
+        effective_exclude = src_cfg.get("exclude_keywords", exclude_keywords)
+        effective_keywords = src_cfg.get("keywords", keywords)
+        if matches_exclude(item, effective_exclude):
             continue
         # wheremymvps.at rows already scope to this MVP via PAT+userId,
         # so the include-keyword filter would only get in the way.
-        if item.get("source") != "wheremymvpsat" and not matches_keywords(item, keywords):
+        if item.get("source") != "wheremymvpsat" and not matches_keywords(item, effective_keywords):
             keyword_rejects += 1
             seen.add(item["url"])
             continue
         new_items.append(item)
 
-    # Heuristic: user set `keywords` on a feed they probably own. Every RSS
-    # item was rejected by the keyword filter -> likely misconfigured.
-    if keywords and total_rss_items and keyword_rejects == total_rss_items:
+    # Heuristic: at least one source has a non-empty keywords filter AND
+    # every RSS item got dropped by it -> likely misconfigured (typically:
+    # user set their own name as a filter on their own feed).
+    if total_rss_items and keyword_rejects == total_rss_items:
         print(
             f"! all {total_rss_items} RSS items were dropped by the keywords filter. "
-            "If you own the feeds in `sources`, empty `keywords:` in config.yml - "
-            "your own posts almost never contain your own name.",
+            "If a filtered source is a feed you own, set `keywords: []` on it in "
+            "config.yml - your own posts almost never contain your own name.",
             file=sys.stderr,
         )
 
@@ -547,6 +565,38 @@ def _self_check() -> None:
     _pi = _parse_iso_struct("2026-07-04")
     assert _pi is not None and _pi.tm_year == 2026 and _pi.tm_mon == 7 and _pi.tm_mday == 4
     assert _haystack({"title": "Ab", "summary": "Cd", "url": "Ef"}) == "ab cd ef"
+    _norm = list(_normalize_sources(["https://a.example/feed"]))
+    assert _norm == [("https://a.example/feed", {})]
+    _norm = list(_normalize_sources([
+        "https://a.example/feed",
+        {"url": "https://b.example/feed", "keywords": ["Foo"]},
+        {"no_url": True},
+    ]))
+    assert _norm[0] == ("https://a.example/feed", {})
+    assert _norm[1][0] == "https://b.example/feed" and _norm[1][1]["keywords"] == ["Foo"]
+    assert len(_norm) == 2  # entry without url is dropped
+    assert list(_normalize_sources(None)) == []
+    # Integration: per-source overrides beat global; wmma bypasses include filter.
+    def _apply(item, global_keywords, global_exclude):
+        src = item.get("_source_cfg") or {}
+        eff_ex = src.get("exclude_keywords", global_exclude)
+        eff_kw = src.get("keywords", global_keywords)
+        if matches_exclude(item, eff_ex):
+            return "excluded"
+        if item.get("source") != "wheremymvpsat" and not matches_keywords(item, eff_kw):
+            return "keyword-drop"
+        return "pass"
+    _own = {"title": "macOS LAPS", "summary": "", "url": "https://mine.example/x", "_source_cfg": {"keywords": [], "exclude_keywords": []}}
+    _agg = {"title": "Something by Roy Klooster", "summary": "", "url": "https://x", "_source_cfg": {"keywords": ["Roy Klooster"]}}
+    _agg_miss = {"title": "Nothing here", "summary": "", "url": "https://x", "_source_cfg": {"keywords": ["Roy Klooster"]}}
+    _bare_global = {"title": "post", "summary": "", "url": "https://x", "_source_cfg": {}}
+    _wmma = {"title": "Conf", "summary": "", "url": "https://x", "source": "wheremymvpsat", "_source_cfg": None}
+    assert _apply(_own, ["should-not-apply"], []) == "pass"       # per-source [] wins over global
+    assert _apply(_agg, [], []) == "pass"                          # per-source keyword matches
+    assert _apply(_agg_miss, [], []) == "keyword-drop"             # per-source keyword rejects
+    assert _apply(_bare_global, ["post"], []) == "pass"            # bare falls back to global
+    assert _apply(_bare_global, ["missing"], []) == "keyword-drop" # global mismatch drops
+    assert _apply(_wmma, ["irrelevant"], []) == "pass"             # wmma bypasses include filter
     # Shipped config must be valid YAML - guards against the "keywords: []
     # followed by commented example items" pattern that breaks the moment
     # a user un-comments a real item.

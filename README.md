@@ -42,30 +42,40 @@ Quick summary of the three things you'll actually edit:
 
 ### `config.yml` — sources and filters
 
+Filters can be global (apply to every source) or **per-source** (override on a specific feed). Bare URL strings inherit global filters; dict-shape sources can carry their own `keywords` / `exclude_keywords`:
+
 ```yaml
 sources:
+  # Simple string = inherits global filters below
   - https://yourblog.example.com/feed.xml
-  - https://anchor.fm/your-podcast/rss
-  - https://youtube.com/feeds/videos.xml?channel_id=XXXXXXXX
 
-keywords:            # leave empty for your own feeds
-  - Roy Klooster     # your name/handles for feeds you don't own
+  # Dict form = per-source overrides
+  - url: https://community-aggregator.example.com/feed.xml
+    keywords:
+      - Your Name
+      - your-github-login
+  - url: https://co-host.example.com/podcast/rss
+    keywords:
+      - Your Name
 
-exclude_keywords:    # optional
+# Global filters — used when a source doesn't specify its own.
+keywords:                # leave empty when every feed is yours
+exclude_keywords:
   - sponsored
 
 start_date: 2026-07-01   # optional: skip your back-catalogue
-
 auto_merge: false
 ```
 
 | Field | What it does |
 |---|---|
-| `sources` | Feeds or plain URLs to monitor. Feeds auto-detected. |
-| `keywords` | Include filter. Empty = accept all. Set for feeds you don't own. |
-| `exclude_keywords` | Case-insensitive drop list. Applied before include. |
+| `sources` | Feeds or URLs. Bare string = uses global filters. Dict with `url:` = can override `keywords` / `exclude_keywords` for that source only. |
+| `keywords` (global) | Include filter. Empty = accept all. Set only if a source you don't own also uses global filters. |
+| `exclude_keywords` (global) | Case-insensitive drop list. Applied before include. |
 | `start_date` | YYYY-MM-DD lower bound on publish date. |
 | `auto_merge` | Auto-merge nightly PRs if they're mergeable. |
+
+**When per-source overrides are useful:** your own blog needs no filter (accept everything), but a community aggregator or a co-host's podcast needs `keywords: [Your Name]` to isolate your content. Set both in the same run without conflict — bare strings use global (empty), dict sources override.
 
 Technology Area and Target Audience are **not** in config — the model picks them per item from what the content actually is. If it can't decide, it writes `(uncertain - please review)` and you fill it in.
 
