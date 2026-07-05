@@ -6,12 +6,16 @@ sources:
     keywords:
       # - Intune
       # - Microsoft Graph
+      # - content authored by <your name>
     exclude_keywords:
       # - sponsored content
+      # - product marketing for <your employer>
 
 # Global fallbacks - used only for bare-URL sources above.
 keywords:
 exclude_keywords:
+  - <your employer>-branded product marketing
+  # - sponsored content
 
 # start_date: 2026-01-01
 auto_merge: false

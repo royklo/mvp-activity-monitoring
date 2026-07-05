@@ -46,22 +46,26 @@ Filters can be global (apply to every source) or **per-source** (override on a s
 
 ```yaml
 sources:
-  # Simple string = inherits global filters below
+  # Bare URL = inherits global filters below
   - https://yourblog.example.com/feed.xml
 
-  # Dict form = per-source overrides
+  # Dict form = per-source semantic topic hints
   - url: https://community-aggregator.example.com/feed.xml
     keywords:
-      - Your Name
-      - your-github-login
-  - url: https://co-host.example.com/podcast/rss
+      - Intune
+      - Microsoft Graph
+      - Entra ID
+    exclude_keywords:
+      - Power BI
+  - url: https://anchor.fm/some-podcast/rss
     keywords:
-      - Your Name
+      - macOS management
+    exclude_keywords: []
 
-# Global filters — used when a source doesn't specify its own.
-keywords:                # leave empty when every feed is yours
+# Global filters — used only for bare URL sources above.
+keywords:                # leave empty when every bare source is on-topic
 exclude_keywords:
-  - sponsored
+  - sponsored content
 
 start_date: 2026-07-01   # optional: skip your back-catalogue
 auto_merge: false
