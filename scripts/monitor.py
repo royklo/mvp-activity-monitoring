@@ -131,7 +131,12 @@ def gather_wheremymvpsat(config: dict):
         return
     print(f"wheremymvpsat: /speakers filter=userId eq '{user_id}' -> {len(rows)} records")
     if not rows:
-        print("wheremymvpsat: 0 records - add events on your wheremymvps.at profile first")
+        print(
+            f"wheremymvpsat: 0 records for userId '{user_id}'. Note the value is "
+            "case-sensitive and must NOT include the leading '@' (profile shown as "
+            "'@Jane-Doe' is stored as 'Jane-Doe'). If the id is already correct, "
+            "add events on your wheremymvps.at profile first."
+        )
         return
 
     conf_ids = sorted({row["conferenceId"] for row in rows if row.get("conferenceId")})
