@@ -4,7 +4,7 @@
 
 Fork it, point it at your content, stop retyping portal fields.
 
-> **⭐ Star and 👁 Watch → Custom → Releases** on this template so you get an email whenever a new version ships. Your instance will auto-sync those updates via a weekly PR — no manual merges required. See [SYNC.md](SYNC.md).
+> **⭐ Star and 👁 Watch → Custom → Releases** on this template so you get an email whenever a new version ships. Your instance will open a weekly PR to sync those updates — just review and merge. See [SYNC.md](SYNC.md).
 
 ---
 
@@ -35,7 +35,7 @@ Full details of what's synced, what isn't, and how to handle local customization
 
 **Full step-by-step checklist:** **[SETUP.md](SETUP.md)** — fork, permissions, config, PAT secret, first run.
 
-> **▶ Try it now:** the nightly cron only fires at 03:00 UTC. To test immediately after forking, go to **Actions → MVP activity monitor → Run workflow**. First run drafts the last few weeks of your feed and opens a PR.
+> **▶ Try it now:** the nightly cron only fires at 03:00 UTC. To test immediately after forking, go to **Actions → MVP activity monitor → Run workflow → Run workflow**. First run drafts whatever your sources return (bounded by `start_date` in `config.yml` and the feed's own history) and opens a PR.
 
 > **Public or private repo?** Either works, same features. Private is recommended if you'd rather review and polish drafts before anything about your activities is publicly visible.
 
