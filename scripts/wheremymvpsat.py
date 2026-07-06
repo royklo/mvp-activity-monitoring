@@ -15,7 +15,10 @@ from datetime import date
 import httpx
 
 
-def gather_wheremymvpsat(config: dict):
+CONF_CHUNK = 20  # OData $filter OR-clause size; enough per hop, small enough to fit URL limits
+
+
+def gather_wheremymvpsat(config: dict, client: httpx.Client | None = None):
     wmma = config.get("wheremymvpsat") or {}
     if not wmma.get("enabled"):
         print("wheremymvpsat: disabled (config: enabled=false)")
@@ -31,37 +34,46 @@ def gather_wheremymvpsat(config: dict):
     base = wmma.get("base_url", "https://wheremymvps.at/api/v1").rstrip("/")
     headers = {"Authorization": f"Bearer {pat}", "Accept": "application/json"}
     print(f"wheremymvpsat: enabled, user_id={user_id}")
-
+    # Callers can inject a shared client; fall back to a one-shot Client so the
+    # module stays usable standalone (tests, one-off scripts).
+    owned = client is None
+    http = client if client is not None else httpx.Client()
     try:
-        r = httpx.get(f"{base}/speakers", params={"$filter": f"userId eq '{user_id}'"}, headers=headers, timeout=30)
-        r.raise_for_status()
-        rows = r.json().get("value", [])
-    except httpx.HTTPError as exc:
-        print(f"! wheremymvpsat /speakers failed: {exc}", file=sys.stderr)
-        return
-    print(f"wheremymvpsat: /speakers filter=userId eq '{user_id}' -> {len(rows)} records")
-    if not rows:
-        print(
-            f"wheremymvpsat: 0 records for userId '{user_id}'. Note the value is "
-            "case-sensitive and must NOT include the leading '@' (profile shown as "
-            "'@Jane-Doe' is stored as 'Jane-Doe'). If the id is already correct, "
-            "add events on your wheremymvps.at profile first."
-        )
-        return
-
-    conf_ids = sorted({row["conferenceId"] for row in rows if row.get("conferenceId")})
-    conferences: dict[str, dict] = {}
-    if conf_ids:
         try:
-            or_clause = " or ".join(f"id eq '{cid}'" for cid in conf_ids)
-            r = httpx.get(f"{base}/conferences", params={"$filter": or_clause}, headers=headers, timeout=30)
+            r = http.get(f"{base}/speakers", params={"$filter": f"userId eq '{user_id}'"}, headers=headers, timeout=30)
             r.raise_for_status()
-            for c in r.json().get("value", []):
-                if isinstance(c, dict) and c.get("id"):
-                    conferences[c["id"]] = c
-            print(f"wheremymvpsat: /conferences enriched {len(conferences)}/{len(conf_ids)} records")
+            rows = r.json().get("value", [])
         except httpx.HTTPError as exc:
-            print(f"! wheremymvpsat /conferences failed: {exc}", file=sys.stderr)
+            print(f"! wheremymvpsat /speakers failed: {exc}", file=sys.stderr)
+            return
+        print(f"wheremymvpsat: /speakers filter=userId eq '{user_id}' -> {len(rows)} records")
+        if not rows:
+            print(
+                f"wheremymvpsat: 0 records for userId '{user_id}'. Note the value is "
+                "case-sensitive and must NOT include the leading '@' (profile shown as "
+                "'@Jane-Doe' is stored as 'Jane-Doe'). If the id is already correct, "
+                "add events on your wheremymvps.at profile first."
+            )
+            return
+
+        conf_ids = sorted({row["conferenceId"] for row in rows if row.get("conferenceId")})
+        conferences: dict[str, dict] = {}
+        # Chunk the OR-clause so a large attendance history doesn't blow the URL length.
+        for i in range(0, len(conf_ids), CONF_CHUNK):
+            chunk = conf_ids[i:i + CONF_CHUNK]
+            try:
+                or_clause = " or ".join(f"id eq '{cid}'" for cid in chunk)
+                r = http.get(f"{base}/conferences", params={"$filter": or_clause}, headers=headers, timeout=30)
+                r.raise_for_status()
+                for c in r.json().get("value", []):
+                    if isinstance(c, dict) and c.get("id"):
+                        conferences[c["id"]] = c
+            except httpx.HTTPError as exc:
+                print(f"! wheremymvpsat /conferences chunk {i}-{i+len(chunk)} failed: {exc}", file=sys.stderr)
+        print(f"wheremymvpsat: /conferences enriched {len(conferences)}/{len(conf_ids)} records")
+    finally:
+        if owned:
+            http.close()
 
     for row in rows:
         conf = conferences.get(row.get("conferenceId", ""), {})

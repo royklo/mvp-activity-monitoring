@@ -108,27 +108,11 @@ Merged files stay in `activities/` as your permanent log. `.state/seen.json` get
 
 ## Getting updates from the template
 
-"Use this template" creates an independent copy — updates to the template repo don't auto-flow into your instance. To pull the latest fixes and features:
+Your instance ships with `.github/workflows/sync-template.yml`. Every Monday at 04:00 UTC (and on manual trigger) it opens a PR titled `Sync from template <version>` if the template has new commits. Merge the PR to accept the update.
 
-**One-time:** wire the template as a second git remote in your local clone.
+Full explanation, list of synced paths, and how to handle local customizations: **[SYNC.md](SYNC.md)**.
 
-```bash
-git remote add template git@github.com:royklo/mvp-activity-monitoring.git
-git fetch template
-```
-
-**When you want to update:**
-
-```bash
-git fetch template
-git merge template/main
-# resolve conflicts — for config.yml and custom-instructions.md, keep YOUR version
-git push
-```
-
-Your config, secrets, and merged activities are safe. The template only ever changes the script, workflow, templates, and references.
-
-> **Tip:** click **Watch → Custom → Releases** on <https://github.com/royklo/mvp-activity-monitoring> to get an email when a new version is tagged.
+> **Optional:** click **Watch → Custom → Releases** on <https://github.com/royklo/mvp-activity-monitoring> to get an email when a new template version is tagged.
 
 ---
 
@@ -141,3 +125,5 @@ Your config, secrets, and merged activities are safe. The template only ever cha
 | `(no second area detected)` or `(uncertain - please review)` in the file | Design, not a bug. The model deliberately flagged that field for you to decide. |
 | Model call HTTP 400 | `model:` value doesn't accept `temperature: 0`. Switch to `openai/gpt-4.1` or strip the temperature param in `call_github_models`. |
 | wheremymvps.at returns zero rows | `user_id` value is case-sensitive and drops the leading `@` (profile `@Jane-Doe` → `user_id: "Jane-Doe"`), missing `speakers:read` scope on the PAT, or the account has no linked events yet. |
+| I merged a sync PR and my local tweak to a synced file is gone | Your commit is still in `git log`. Cherry-pick it back: `git cherry-pick <sha>` on main. To prevent recurrence, delete the file's path from `.github/template-sync-paths.txt` in your fork so future sync PRs skip it. |
+| Config source vanished from runs | Check the run log for `! ignoring malformed source entry`. A source in `config.yml` with no `url:` key is silently skipped as of v1.5.0 — the warning now surfaces this. |

@@ -6,7 +6,9 @@ import os
 import re
 import string
 import sys
+import time
 from datetime import date
+from functools import lru_cache
 from itertools import chain
 from pathlib import Path
 from urllib.parse import urlparse
@@ -79,6 +81,24 @@ def _normalize_sources(sources):
             yield src, {}
         elif isinstance(src, dict) and src.get("url"):
             yield src["url"], src
+        else:
+            print(f"! ignoring malformed source entry (needs a `url:` key): {src!r}", file=sys.stderr)
+
+
+_HTTP_CLIENT: httpx.Client | None = None
+
+
+def _http() -> httpx.Client:
+    """Shared httpx client for LLM + fallback page fetches. Connection-level
+    retries (DNS, connect timeouts) handled by the transport; 5xx retries are
+    handled in call_github_models."""
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None:
+        _HTTP_CLIENT = httpx.Client(
+            transport=httpx.HTTPTransport(retries=3),
+            follow_redirects=True,
+        )
+    return _HTTP_CLIENT
 
 
 def gather_items(sources):
@@ -121,7 +141,7 @@ def _pick_body(entry) -> str:
 
 def _fetch_page(url: str) -> str | None:
     try:
-        r = httpx.get(url, timeout=20, follow_redirects=True)
+        r = _http().get(url, timeout=20)
         r.raise_for_status()
         return r.text
     except httpx.HTTPError as exc:
@@ -186,14 +206,18 @@ def build_filter_prompt(item: dict, keywords: list[str], exclude_keywords: list[
     inc = "\n".join(f"- {k}" for k in keywords) if keywords else "(no include filter - accept anything on-topic for an MVP)"
     exc = "\n".join(f"- {k}" for k in exclude_keywords) if exclude_keywords else "(nothing to exclude)"
     tags = ", ".join(item.get("tags") or []) or "(none)"
-    tpl = string.Template((PROMPTS_DIR / "filter.md").read_text())
-    return tpl.safe_substitute(
+    return _filter_template().safe_substitute(
         title=item["title"],
         tags=tags,
         body=item["summary"],
         include_topics=inc,
         exclude_topics=exc,
     )
+
+
+@lru_cache(maxsize=1)
+def _filter_template() -> string.Template:
+    return string.Template((PROMPTS_DIR / "filter.md").read_text())
 
 
 def classify_item(item: dict, keywords: list[str], exclude_keywords: list[str], token: str, model: str) -> bool:
@@ -225,43 +249,70 @@ def slug_from_url(url: str) -> str:
 
 
 def call_github_models(prompt: str, token: str, model: str) -> str:
-    r = httpx.post(
-        MODELS_ENDPOINT,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        json={
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0,
-        },
-        timeout=90,
-    )
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"].strip()
+    """Call GitHub Models with exponential-backoff retry on 5xx and network errors.
+    4xx errors bubble immediately - client-side bugs don't self-heal."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+    }
+    delays = [1, 3, 9]  # ~13s across 3 retries; final attempt has no sleep after it
+    for attempt in range(len(delays) + 1):
+        try:
+            r = _http().post(MODELS_ENDPOINT, headers=headers, json=payload, timeout=90)
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"].strip()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500 or attempt == len(delays):
+                raise
+            print(f"! LLM {exc.response.status_code} on attempt {attempt + 1}, retrying in {delays[attempt]}s", file=sys.stderr)
+        except httpx.HTTPError as exc:
+            if attempt == len(delays):
+                raise
+            print(f"! LLM network error on attempt {attempt + 1} ({exc}), retrying in {delays[attempt]}s", file=sys.stderr)
+        time.sleep(delays[attempt])
+    raise RuntimeError("unreachable")  # loop always returns or raises
 
 
-def _load_drafter_template() -> string.Template:
+# Prompt files are static across a run - cache them so a 20-item run doesn't
+# do 20x the same disk reads. custom-instructions.md is deliberately NOT
+# cached because test_monitor.py mutates it in-place.
+@lru_cache(maxsize=1)
+def _drafter_template() -> string.Template:
     parts = [p.read_text() for p in sorted(DRAFTER_DIR.glob("[0-9]*.md"))]
     return string.Template("".join(parts))
 
 
+@lru_cache(maxsize=1)
+def _tech_areas() -> str:
+    return TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
+
+
+@lru_cache(maxsize=1)
+def _activity_types() -> str:
+    return ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
+
+
+@lru_cache(maxsize=1)
+def _custom_wrapper() -> string.Template:
+    return string.Template((PROMPTS_DIR / "custom_instructions_wrapper.md").read_text())
+
+
+@lru_cache(maxsize=1)
+def _wmma_source_note() -> str:
+    return (PROMPTS_DIR / "wmma_source_note.md").read_text()
+
+
 def build_prompt(item: dict, template: str) -> str:
-    tech_areas = TECH_AREAS_PATH.read_text() if TECH_AREAS_PATH.exists() else ""
-    activity_types = ACTIVITY_TYPES_PATH.read_text() if ACTIVITY_TYPES_PATH.exists() else ""
     custom = load_custom_instructions()
-    if custom:
-        wrapper = string.Template((PROMPTS_DIR / "custom_instructions_wrapper.md").read_text())
-        custom_block = wrapper.safe_substitute(custom_instructions=custom)
-    else:
-        custom_block = ""
-    if item.get("source") == "wheremymvpsat":
-        source_note = (PROMPTS_DIR / "wmma_source_note.md").read_text()
-    else:
-        source_note = ""
-    return _load_drafter_template().safe_substitute(
+    custom_block = _custom_wrapper().safe_substitute(custom_instructions=custom) if custom else ""
+    source_note = _wmma_source_note() if item.get("source") == "wheremymvpsat" else ""
+    return _drafter_template().safe_substitute(
         custom_block=custom_block,
         source_note=source_note,
         url=item["url"],
@@ -269,8 +320,8 @@ def build_prompt(item: dict, template: str) -> str:
         tags=", ".join(item.get("tags") or []) or "(none)",
         body=item["summary"],
         published=item["published"],
-        activity_types=activity_types,
-        tech_areas=tech_areas,
+        activity_types=_activity_types(),
+        tech_areas=_tech_areas(),
         template=template,
     )
 
@@ -321,7 +372,7 @@ def main() -> int:
     stats = {"seen": 0, "pre_start": 0, "included": 0, "excluded": 0, "rss_total": 0, "wmma_total": 0}
     # start_date misses don't get marked seen, so moving start_date earlier
     # later resurfaces those items on the next run.
-    for item in chain(gather_items(sources), gather_wheremymvpsat(config)):
+    for item in chain(gather_items(sources), gather_wheremymvpsat(config, _http())):
         is_wmma = item.get("source") == "wheremymvpsat"
         stats["wmma_total" if is_wmma else "rss_total"] += 1
         url = item["url"]

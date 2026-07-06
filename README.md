@@ -23,12 +23,10 @@ The generated markdown mirrors the MVP portal form 1:1: Activity Type, Primary/A
 
 ## Stay in sync with template updates
 
-"Use this template" creates an independent copy — updates to this template don't auto-flow into your instance. To hear about new versions:
+Your instance ships with `.github/workflows/sync-template.yml`, which runs every Monday and opens a PR titled `Sync from template <version>` when the template has new commits. Merge the PR to update. Nothing else to do.
 
-- **⭐ Star** the template repo — bookmark, appears in your Stars list. Doesn't send notifications.
-- **👁 Watch → Custom → Releases** — this is the one that sends you an email whenever a new version is tagged (every merge to main on the template repo publishes a release). Recommended.
-
-When you want to pull a template update into your instance, see the **"Getting updates from the template"** section in [SETUP.md](SETUP.md).
+- Full details of what's synced, what isn't, and how to handle local customizations: **[SYNC.md](SYNC.md)**
+- Optional email notification when a release lands: **👁 Watch → Custom → Releases** on the template repo
 
 ---
 
@@ -77,7 +75,7 @@ For the full config (including `model:` and `wheremymvpsat:`), see [`config.yml`
 | `start_date` | YYYY-MM-DD lower bound on publish date. |
 | `auto_merge` | Auto-merge nightly PRs if they're mergeable. |
 
-**Why semantic and not substring:** a post titled *"macOS LAPS vs. Intune Compliance Policy"* whose intro says *"I work at Inforcer"* should be logged as an Intune activity, not dropped because "Inforcer" appears once. The classifier reads the whole post plus tags and decides on topic, not on string presence. Costs one extra small model call per RSS item — negligible on GH Models free tier.
+**Why semantic and not substring:** a post titled *"macOS LAPS vs. Intune Compliance Policy"* whose intro says *"I work at &lt;your employer&gt;"* should be logged as an Intune activity, not dropped just because the employer name appears once in the intro. The classifier reads the whole post plus tags and decides on topic, not on string presence. Costs one extra small model call per RSS item — negligible on GH Models free tier.
 
 **When per-source overrides are useful:** your own blog and a community aggregator can have completely different include/exclude lists.
 
@@ -112,7 +110,7 @@ Only if you want conference-attendance sync:
    ```yaml
    wheremymvpsat:
      enabled: true
-     user_id: royklo   # your wheremymvps.at handle
+     user_id: "Your-Handle"   # exact handle from wheremymvps.at (case-sensitive, no leading '@')
    ```
 
 ---
@@ -178,6 +176,14 @@ The model picks a different Activity Type automatically when the source clearly 
 
 - [`references/activity-types.md`](references/activity-types.md) — per-type extra fields (Livestream views, In-Person Attendees, Microsoft Event enum, etc.)
 - [`references/technology-areas.md`](references/technology-areas.md) — full Primary/Additional Technology Area enum
+
+---
+
+## Security notes
+
+- **Trust your feeds.** RSS/Atom body content flows into the drafter's LLM prompt. A hostile feed can try to jailbreak the model's output (fake headings, injected links, etc.). The drafter's non-negotiables block guards against this and `safe_substitute` blocks Python-level injection, but the model isn't a hard security boundary. Only subscribe to feeds you trust. If you syndicate a community aggregator, review the drafted PR before merging.
+- **Secrets stay in Actions.** `WHEREMYMVPSAT_PAT` lives only in the repo secret; `GITHUB_TOKEN` is workflow-scoped and never persisted. Neither is logged or included in PR titles/bodies.
+- **`.state/seen.json` is tracked deliberately.** The nightly PR commits an updated `seen.json`; if you gitignore it, next run forgets every URL.
 
 ---
 
