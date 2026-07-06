@@ -372,7 +372,7 @@ def main() -> int:
     stats = {"seen": 0, "pre_start": 0, "included": 0, "excluded": 0, "rss_total": 0, "wmma_total": 0}
     # start_date misses don't get marked seen, so moving start_date earlier
     # later resurfaces those items on the next run.
-    for item in chain(gather_items(sources), gather_wheremymvpsat(config)):
+    for item in chain(gather_items(sources), gather_wheremymvpsat(config, _http())):
         is_wmma = item.get("source") == "wheremymvpsat"
         stats["wmma_total" if is_wmma else "rss_total"] += 1
         url = item["url"]

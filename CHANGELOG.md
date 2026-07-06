@@ -18,8 +18,9 @@ For pre-v1.5.0 releases, see [GitHub Releases](https://github.com/royklo/mvp-act
 ### Changed
 - `README.md` and `SETUP.md` point at the auto-sync workflow instead of the previous manual `git remote add template` + `git merge template/main` instructions.
 - `call_github_models` retries up to 3 times with exponential backoff (1s, 3s, 9s) on 5xx and network errors. Nightly runs no longer drop items on a single transient blip.
-- All outbound HTTP (LLM calls, fallback page fetches) now shares a single `httpx.Client()` with connection-level retries, cutting TLS handshakes per run.
+- All outbound HTTP (LLM calls, fallback page fetches, wmma API) now shares a single `httpx.Client()` with connection-level retries, cutting TLS handshakes per run. `gather_wheremymvpsat` accepts the shared client as an optional argument.
 - Static prompt files (drafter template, references, wrapper, wmma note, filter) are cached via `lru_cache` at first read - a 20-item run does 5 file reads instead of ~100.
+- wheremymvps.at conference queries chunk into batches of 20 conference IDs. An MVP with a long attendance history no longer risks an OData `OR`-clause URL that exceeds URL length limits.
 
 ### Fixed
 - **Anonymized shipped examples** so downstream instances don't inherit personal identifiers via the sync workflow:
