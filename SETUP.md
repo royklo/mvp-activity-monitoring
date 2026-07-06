@@ -125,3 +125,5 @@ Full explanation, list of synced paths, and how to handle local customizations: 
 | `(no second area detected)` or `(uncertain - please review)` in the file | Design, not a bug. The model deliberately flagged that field for you to decide. |
 | Model call HTTP 400 | `model:` value doesn't accept `temperature: 0`. Switch to `openai/gpt-4.1` or strip the temperature param in `call_github_models`. |
 | wheremymvps.at returns zero rows | `user_id` value is case-sensitive and drops the leading `@` (profile `@Jane-Doe` → `user_id: "Jane-Doe"`), missing `speakers:read` scope on the PAT, or the account has no linked events yet. |
+| I merged a sync PR and my local tweak to a synced file is gone | Your commit is still in `git log`. Cherry-pick it back: `git cherry-pick <sha>` on main. To prevent recurrence, delete the file's path from `.github/template-sync-paths.txt` in your fork so future sync PRs skip it. |
+| Config source vanished from runs | Check the run log for `! ignoring malformed source entry`. A source in `config.yml` with no `url:` key is silently skipped as of v1.5.0 — the warning now surfaces this. |

@@ -179,6 +179,14 @@ The model picks a different Activity Type automatically when the source clearly 
 
 ---
 
+## Security notes
+
+- **Trust your feeds.** RSS/Atom body content flows into the drafter's LLM prompt. A hostile feed can try to jailbreak the model's output (fake headings, injected links, etc.). The drafter's non-negotiables block guards against this and `safe_substitute` blocks Python-level injection, but the model isn't a hard security boundary. Only subscribe to feeds you trust. If you syndicate a community aggregator, review the drafted PR before merging.
+- **Secrets stay in Actions.** `WHEREMYMVPSAT_PAT` lives only in the repo secret; `GITHUB_TOKEN` is workflow-scoped and never persisted. Neither is logged or included in PR titles/bodies.
+- **`.state/seen.json` is tracked deliberately.** The nightly PR commits an updated `seen.json`; if you gitignore it, next run forgets every URL.
+
+---
+
 ## License
 
 MIT. Do whatever you want with it. PRs welcome, not required.
