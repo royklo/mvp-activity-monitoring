@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 For pre-v1.5.0 releases, see [GitHub Releases](https://github.com/royklo/mvp-activity-monitoring/releases) - the tag-on-merge workflow auto-generates release notes there from Conventional Commit messages.
 
+## [v1.5.1] - 2026-07-06
+
+### Fixed
+- **`sync-template.yml` grep patterns use POSIX character classes** instead of `\s` (a GNU-only extension). Works identically on GitHub's ubuntu-latest runners but is now portable to BSD grep (macOS runners, minimal Alpine images). Prevents indented `#` lines in `.github/template-sync-paths.txt` from being mis-treated as sync paths.
+
 ## [v1.5.0] - 2026-07-06
 
 ### Added
