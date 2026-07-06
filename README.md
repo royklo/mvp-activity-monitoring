@@ -4,6 +4,8 @@
 
 Fork it, point it at your content, stop retyping portal fields.
 
+> **⭐ Star and 👁 Watch → Custom → Releases** on this template so you get an email whenever a new version ships. Your instance will auto-sync those updates via a weekly PR — no manual merges required. See [SYNC.md](SYNC.md).
+
 ---
 
 ## What it does
@@ -25,14 +27,15 @@ The generated markdown mirrors the MVP portal form 1:1: Activity Type, Primary/A
 
 Your instance ships with `.github/workflows/sync-template.yml`, which runs every Monday and opens a PR titled `Sync from template <version>` when the template has new commits. Merge the PR to update. Nothing else to do.
 
-- Full details of what's synced, what isn't, and how to handle local customizations: **[SYNC.md](SYNC.md)**
-- Optional email notification when a release lands: **👁 Watch → Custom → Releases** on the template repo
+Full details of what's synced, what isn't, and how to handle local customizations: **[SYNC.md](SYNC.md)**.
 
 ---
 
 ## Setup
 
 **Full step-by-step checklist:** **[SETUP.md](SETUP.md)** — fork, permissions, config, PAT secret, first run.
+
+> **▶ Try it now:** the nightly cron only fires at 03:00 UTC. To test immediately after forking, go to **Actions → MVP activity monitor → Run workflow**. First run drafts the last few weeks of your feed and opens a PR.
 
 > **Public or private repo?** Either works, same features. Private is recommended if you'd rather review and polish drafts before anything about your activities is publicly visible.
 
