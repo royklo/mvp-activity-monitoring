@@ -4,32 +4,16 @@ Notable changes to this template. Downstream instances have their own CHANGELOG 
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning follows semver via Conventional Commit prefixes (see `SETUP.md`).
 
-For pre-v1.5.0 releases, see [GitHub Releases](https://github.com/royklo/mvp-activity-monitoring/releases) - the tag-on-merge workflow auto-generates release notes there from Conventional Commit messages.
+## [v1.0.0] - 2026-07-06
 
-## [v1.5.1] - 2026-07-06
+First stable release. The template is production-ready:
 
-### Fixed
-- **`sync-template.yml` grep patterns use POSIX character classes** instead of `\s` (a GNU-only extension). Works identically on GitHub's ubuntu-latest runners but is now portable to BSD grep (macOS runners, minimal Alpine images). Prevents indented `#` lines in `.github/template-sync-paths.txt` from being mis-treated as sync paths.
+- **Nightly RSS + wheremymvps.at gather** with semantic LLM classifier (`prompts/filter.md`).
+- **Drafter prompt split into 18 small files** under `prompts/drafter/`, plus reference files, a custom-instructions wrapper, and a wmma source note. Assembled via `string.Template.safe_substitute`.
+- **Weekly sync workflow** (`.github/workflows/sync-template.yml`) opens a `Sync from template <version>` PR into every downstream instance whenever the template moves. Path manifest at `.github/template-sync-paths.txt`.
+- **Auto-releases** on merge via `.github/workflows/release.yml` (tag + GitHub Release).
+- **Resilient LLM calls**: 3-attempt exponential-backoff retry, shared `httpx.Client` with transport-level connection retries, static prompt files cached with `lru_cache`.
+- **Guarded diagnostics**: no silent empty-response branches; malformed sources, missing PAT, and wrong wmma userId all log clear stderr lines.
+- **Assert-based tests** (`scripts/test_monitor.py`) run in CI on every PR (required status check).
 
-## [v1.5.0] - 2026-07-06
-
-### Added
-- **Weekly auto-sync workflow.** `.github/workflows/sync-template.yml` opens a PR titled `Sync from template <version>` on downstream instances whenever the template has new commits. Path list in `.github/template-sync-paths.txt`. Guarded off on the template repo itself.
-- `SYNC.md` documents what's synced, what isn't, and how to handle local customizations.
-- README "Security notes" section covers prompt-injection surface via untrusted feeds, secret handling, and why `.state/seen.json` is deliberately tracked.
-- SETUP troubleshooting rows for "I merged a sync PR and lost my tweak" and "config source vanished from runs".
-- Malformed source entries in `config.yml` (dict without a `url:` key) now log `! ignoring malformed source entry` instead of silently disappearing.
-
-### Changed
-- `README.md` and `SETUP.md` point at the auto-sync workflow instead of the previous manual `git remote add template` + `git merge template/main` instructions.
-- `call_github_models` retries up to 3 times with exponential backoff (1s, 3s, 9s) on 5xx and network errors. Nightly runs no longer drop items on a single transient blip.
-- All outbound HTTP (LLM calls, fallback page fetches, wmma API) now shares a single `httpx.Client()` with connection-level retries, cutting TLS handshakes per run. `gather_wheremymvpsat` accepts the shared client as an optional argument.
-- Static prompt files (drafter template, references, wrapper, wmma note, filter) are cached via `lru_cache` at first read - a 20-item run does 5 file reads instead of ~100.
-- wheremymvps.at conference queries chunk into batches of 20 conference IDs. An MVP with a long attendance history no longer risks an OData `OR`-clause URL that exceeds URL length limits.
-
-### Fixed
-- **Anonymized shipped examples** so downstream instances don't inherit personal identifiers via the sync workflow:
-  - `README.md` semantic-filter example now uses `<your employer>` instead of a real company name.
-  - `README.md` wmma config example uses `"Your-Handle"` instead of a real handle.
-  - `prompts/filter.md` classifier example uses "the author's employer".
-  - `custom-instructions.md` voice example is generic.
+For the improvement history leading up to this release, see the closed PRs on this repo.
