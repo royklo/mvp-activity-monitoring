@@ -31,7 +31,7 @@ jobs:
           # Use the *template*'s copy so users get the current manifest even if
           # they haven't merged a prior sync PR yet.
           git show template/main:.github/template-sync-paths.txt \
-            | grep -v '^\s*#' | grep -v '^\s*$' \
+            | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' \
             | while read -r path; do
                 echo "sync: $path"
                 git checkout template/main -- "$path" 2>/dev/null || echo "  skip (missing on template)"
