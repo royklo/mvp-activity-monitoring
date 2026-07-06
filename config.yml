@@ -27,6 +27,6 @@ model: openai/gpt-4.1
 wheremymvpsat:
   enabled: false
   # user_id must match the handle EXACTLY as stored on wheremymvps.at -
-  # case-sensitive, no leading '@'. E.g. profile shown as "@Lewis-Barry"
-  # is stored as "Lewis-Barry"; "lewis-barry" will return zero rows.
+  # case-sensitive, no leading '@'. E.g. profile shown as "@Jane-Doe"
+  # is stored as "Jane-Doe"; "jane-doe" will return zero rows.
   # user_id: "Your-GitHub-Login"
