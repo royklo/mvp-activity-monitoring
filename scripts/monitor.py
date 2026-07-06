@@ -198,10 +198,11 @@ def build_filter_prompt(item: dict, keywords: list[str], exclude_keywords: list[
     """Semantic pre-filter: ask the model whether the content is on-topic.
 
     Substring matching drops posts that MENTION a term but aren't about it
-    ("my name is Roy, I work for Inforcer, and this post is on Intune...")
-    and misses posts that ARE about a topic but never say the exact string
-    in the title. Passing the keywords/exclude_keywords as topic hints and
-    letting the model read the actual content gives accurate filtering.
+    (an author whose bio mentions their employer, in a post that's actually
+    about Intune) and misses posts that ARE about a topic but never say the
+    exact string in the title. Passing the keywords/exclude_keywords as
+    topic hints and letting the model read the actual content gives
+    accurate filtering.
     """
     inc = "\n".join(f"- {k}" for k in keywords) if keywords else "(no include filter - accept anything on-topic for an MVP)"
     exc = "\n".join(f"- {k}" for k in exclude_keywords) if exclude_keywords else "(nothing to exclude)"

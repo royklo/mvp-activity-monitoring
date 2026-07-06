@@ -42,7 +42,7 @@ from wheremymvpsat import _parse_iso_struct
 
 
 def main() -> None:
-    assert slug_from_url("https://rksolutions.nl/posts/macos-laps/") == "posts-macos-laps"
+    assert slug_from_url("https://example.com/posts/macos-laps/") == "posts-macos-laps"
     assert slug_from_url("https://example.com/") == "example-com"
     assert slug_from_url("https://example.com") == "example-com"  # no trailing slash
     assert slug_from_url("https://example.com/héllo-wörld/") == "h-llo-w-rld"
